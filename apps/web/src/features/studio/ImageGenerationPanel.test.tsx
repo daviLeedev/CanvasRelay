@@ -13,6 +13,14 @@ const baseProps = {
   isCanceling: false,
   hasError: false,
   canRetry: false,
+  provider: {
+    provider: "demo",
+    mode: "demo",
+    label: "Deterministic demo",
+    ready: true,
+    message: "Ready without a GPU or model files.",
+  } as const,
+  providerStatusUnavailable: false,
   onSubmit: vi.fn(async () => undefined),
   onCancel: vi.fn(async () => undefined),
   onRetry: vi.fn(async () => undefined),
@@ -23,7 +31,7 @@ const completedJob: ImageJobResponse = {
   status: "completed",
   progress: 100,
   prompt: "A structured studio still",
-  settings: { aspectRatio: "4:3", style: "editorial", seed: 42 },
+  settings: { aspectRatio: "4:3", style: "editorial", seed: 42, provider: "demo" },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: "2026-08-01T00:00:01Z",
   completedAt: "2026-08-01T00:00:04Z",
@@ -93,9 +101,35 @@ describe("ImageGenerationPanel", () => {
     const onRetry = vi.fn(async () => undefined);
     render(<ImageGenerationPanel {...baseProps} hasError canRetry onRetry={onRetry} />);
 
-    expect(screen.getByRole("alert")).toHaveTextContent("The demo service could not finish the request");
+    expect(screen.getByRole("alert")).toHaveTextContent("The image service could not finish the request");
     expect(screen.queryByText(/stack|internal URL|traceback/iu)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("shows live ComfyUI status without pretending unknown progress", () => {
+    render(
+      <ImageGenerationPanel
+        {...baseProps}
+        provider={{
+          provider: "comfyui",
+          mode: "live",
+          label: "Local ComfyUI",
+          ready: true,
+          message: "Connected to the configured local generation workflow.",
+        }}
+        job={{
+          ...completedJob,
+          status: "running",
+          progress: null,
+          settings: { ...completedJob.settings, provider: "comfyui" },
+          result: null,
+          completedAt: null,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 });

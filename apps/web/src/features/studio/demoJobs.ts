@@ -51,8 +51,9 @@ export function createDemoJobs(elapsedMs: number, epochMs: number): DemoJob[] {
 export function projectImageJob(job: import("@/lib/api/imageJobs").ImageJobResponse): DemoJob {
   const phase = {
     queued: "Waiting for API slot",
-    running: "Rendering demo image",
-    completed: "Demo result ready",
+    running: job.settings.provider === "comfyui" ? "Rendering in ComfyUI" : "Rendering demo image",
+    completed: job.settings.provider === "comfyui" ? "Live result ready" : "Demo result ready",
+    failed: "Generation failed",
     canceled: "Canceled by user",
   }[job.status];
 

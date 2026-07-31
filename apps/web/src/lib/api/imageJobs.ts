@@ -9,10 +9,18 @@ const jobStatuses = new Set<ImageJobResponse["status"]>([
   "queued",
   "running",
   "completed",
+  "failed",
   "canceled",
 ]);
 const aspectRatios = new Set<ImageJobResponse["settings"]["aspectRatio"]>(["1:1", "4:3", "3:4", "16:9"]);
 const imageStyles = new Set<ImageJobResponse["settings"]["style"]>(["editorial", "product", "concept"]);
+const imageProviders = new Set<ImageJobResponse["settings"]["provider"]>(["demo", "comfyui"]);
+const imageMimeTypes = new Set<NonNullable<ImageJobResponse["result"]>["mimeType"]>([
+  "image/svg+xml",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,7 +38,8 @@ function parseImageJob(value: unknown): ImageJobResponse {
     value.result === null ||
     (isRecord(value.result) &&
       typeof value.result.url === "string" &&
-      value.result.mimeType === "image/svg+xml" &&
+      typeof value.result.mimeType === "string" &&
+      imageMimeTypes.has(value.result.mimeType as NonNullable<ImageJobResponse["result"]>["mimeType"]) &&
       typeof value.result.width === "number" &&
       typeof value.result.height === "number");
   const settingsAreValid =
@@ -38,22 +47,32 @@ function parseImageJob(value: unknown): ImageJobResponse {
     aspectRatios.has(value.settings.aspectRatio as ImageJobResponse["settings"]["aspectRatio"]) &&
     typeof value.settings.style === "string" &&
     imageStyles.has(value.settings.style as ImageJobResponse["settings"]["style"]) &&
-    typeof value.settings.seed === "number";
+    typeof value.settings.seed === "number" &&
+    typeof value.settings.provider === "string" &&
+    imageProviders.has(value.settings.provider as ImageJobResponse["settings"]["provider"]);
+  const progressIsValid =
+    value.progress === null ||
+    (typeof value.progress === "number" && value.progress >= 0 && value.progress <= 100);
+  const errorIsValid =
+    value.error === null ||
+    (isRecord(value.error) &&
+      typeof value.error.code === "string" &&
+      typeof value.error.message === "string" &&
+      typeof value.error.action === "string" &&
+      typeof value.error.retryable === "boolean");
 
   if (
     typeof value.id !== "string" ||
     typeof value.status !== "string" ||
     !jobStatuses.has(value.status as ImageJobResponse["status"]) ||
-    typeof value.progress !== "number" ||
-    value.progress < 0 ||
-    value.progress > 100 ||
+    !progressIsValid ||
     typeof value.prompt !== "string" ||
     typeof value.createdAt !== "string" ||
     !isNullableString(value.startedAt) ||
     !isNullableString(value.completedAt) ||
     !settingsAreValid ||
     !resultIsValid ||
-    !(value.error === null || isRecord(value.error))
+    !errorIsValid
   ) {
     throw new Error("Invalid image job response.");
   }
@@ -71,13 +90,13 @@ async function requestImageJob(path: string, init?: RequestInit): Promise<ImageJ
   });
 
   if (!response.ok) {
-    throw new Error("The demo image service could not complete the request.");
+    throw new Error("The image service could not complete the request.");
   }
 
   try {
     return parseImageJob(await response.json());
   } catch {
-    throw new Error("The demo image service returned an invalid response.");
+    throw new Error("The image service returned an invalid response.");
   }
 }
 

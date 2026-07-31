@@ -1,12 +1,12 @@
 # CanvasRelay
 
 CanvasRelay is a local-first AI media orchestration studio under active
-foundation development.
+vertical development.
 
-This public repository currently provides a typed Next.js and FastAPI runtime,
-an API health contract, and a responsive studio shell. Media generation,
-provider adapters, job orchestration, the library, and the immersive 3D stage
-are intentionally not implemented in this foundation revision.
+This public repository provides a typed Next.js and FastAPI runtime, a responsive
+2D/3D studio shell, deterministic image jobs, and an optional local ComfyUI image
+provider. The deterministic provider remains the default so the complete flow
+runs without credentials, models, or a GPU.
 
 ## Current Stack
 
@@ -14,6 +14,7 @@ are intentionally not implemented in this foundation revision.
 - TanStack Query
 - FastAPI and Pydantic Settings
 - OpenAPI-generated TypeScript contracts
+- Provider-neutral image jobs with Demo and optional ComfyUI adapters
 - Pytest, Ruff, MyPy, Vitest, and Testing Library
 - pnpm workspaces and uv
 - Docker Compose demo runtime
@@ -66,6 +67,23 @@ docker compose config
 
 Copy the names from `.env.example` into your own untracked environment file or
 shell environment. Only the public API base URL is exposed to browser code.
+
+### Optional local ComfyUI generation
+
+CanvasRelay can submit a user-owned API-format workflow to a local ComfyUI
+server. The browser never receives the ComfyUI address or workflow path.
+
+1. Export a working ComfyUI workflow in API format.
+2. Replace its runtime inputs with the exact placeholders `{{prompt}}`,
+   `{{seed}}`, `{{width}}`, and `{{height}}`. `{{filename_prefix}}` is optional.
+3. Store the configured workflow outside Git or under the ignored `.local/`
+   directory.
+4. Set `CANVASRELAY_IMAGE_PROVIDER=comfyui` and
+   `CANVASRELAY_COMFYUI_WORKFLOW_PATH` in the API process environment.
+5. Start ComfyUI, then start CanvasRelay normally.
+
+See [the ComfyUI adapter example](examples/comfyui/README.md) for the template,
+status behavior, cancellation limits, and safe setup details.
 
 ## Documentation
 

@@ -7,7 +7,7 @@ const queuedJob = {
   status: "queued",
   progress: 0,
   prompt: "A structured studio still",
-  settings: { aspectRatio: "4:3", style: "editorial", seed: 42 },
+  settings: { aspectRatio: "4:3", style: "editorial", seed: 42, provider: "demo" },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: null,
   completedAt: null,
@@ -60,7 +60,7 @@ describe("image job API client", () => {
     );
 
     const request = fetchImageJob("img_demo");
-    await expect(request).rejects.toThrow("demo image service");
+    await expect(request).rejects.toThrow("image service");
     await expect(request).rejects.not.toThrow(/private stack|internal endpoint/iu);
   });
 });

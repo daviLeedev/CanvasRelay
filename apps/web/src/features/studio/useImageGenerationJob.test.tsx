@@ -12,7 +12,7 @@ const queued: ImageJobResponse = {
   status: "queued",
   progress: 0,
   prompt: "A relay test image",
-  settings: { aspectRatio: "1:1", style: "concept", seed: 9 },
+  settings: { aspectRatio: "1:1", style: "concept", seed: 9, provider: "demo" },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: null,
   completedAt: null,

@@ -1,4 +1,4 @@
-import { Ban, Check, Clock3, LoaderCircle } from "lucide-react";
+import { Ban, Check, CircleX, Clock3, LoaderCircle } from "lucide-react";
 
 import { DemoResultPreview } from "./DemoResultPreview";
 import type { DemoJob } from "./types";
@@ -8,6 +8,7 @@ const statusIcon = {
   queued: Clock3,
   running: LoaderCircle,
   completed: Check,
+  failed: CircleX,
   canceled: Ban,
 } as const;
 
@@ -42,13 +43,15 @@ export function StudioStage2D({
               <span className={styles.jobCardTopline}>
                 <StatusIcon aria-hidden="true" size={16} />
                 <span>{job.status}</span>
-                <strong>{job.progress}%</strong>
+                <strong>{job.progress === null ? "--" : `${job.progress}%`}</strong>
               </span>
               <span className={styles.jobName}>{job.name}</span>
               <span className={styles.jobPhase}>{job.phase}</span>
-              <span className={styles.progressTrack} aria-hidden="true">
-                <span style={{ width: `${job.progress}%` }} />
-              </span>
+              {job.progress !== null ? (
+                <span className={styles.progressTrack} aria-hidden="true">
+                  <span style={{ width: `${job.progress}%` }} />
+                </span>
+              ) : null}
             </button>
           );
         })}

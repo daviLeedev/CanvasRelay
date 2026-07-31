@@ -9,11 +9,15 @@ from uuid import uuid4
 from app.domain.image_jobs import (
     AspectRatio,
     ImageJobRecord,
+    ImageProviderName,
     ImageStyle,
-    calculate_state,
+    ProviderErrorDetails,
+    ProviderSnapshot,
     normalize_prompt,
     resolve_seed,
 )
+
+TERMINAL_STATUSES = frozenset({"completed", "failed", "canceled"})
 
 
 class ImageJobNotFoundError(KeyError):
@@ -36,6 +40,7 @@ class ImageJobRepository:
         aspect_ratio: AspectRatio,
         style: ImageStyle,
         seed: int | None,
+        provider: ImageProviderName,
     ) -> ImageJobRecord:
         normalized_prompt = normalize_prompt(prompt)
         record = ImageJobRecord(
@@ -44,6 +49,7 @@ class ImageJobRepository:
             aspect_ratio=aspect_ratio,
             style=style,
             seed=resolve_seed(normalized_prompt, aspect_ratio, style, seed),
+            provider=provider,
             created_at=self.now(),
         )
         with self._lock:
@@ -57,15 +63,42 @@ class ImageJobRepository:
                 raise ImageJobNotFoundError(job_id)
             return replace(record)
 
-    def cancel(self, job_id: str) -> ImageJobRecord:
+    def attach_provider_job(self, job_id: str, provider_job_id: str) -> ImageJobRecord:
         with self._lock:
-            record = self._records.get(job_id)
-            if record is None:
-                raise ImageJobNotFoundError(job_id)
-            now = self.now()
-            if calculate_state(record, now).status == "completed":
-                return replace(record)
-            if record.canceled_at is None:
-                record = replace(record, canceled_at=now)
-                self._records[job_id] = record
+            record = self._required(job_id)
+            record = replace(record, provider_job_id=provider_job_id)
+            self._records[job_id] = record
             return replace(record)
+
+    def apply_snapshot(self, job_id: str, snapshot: ProviderSnapshot) -> ImageJobRecord:
+        with self._lock:
+            record = self._required(job_id)
+            if record.status in TERMINAL_STATUSES:
+                return replace(record)
+            now = self.now()
+            started_at = record.started_at
+            if snapshot.status == "running" and started_at is None:
+                started_at = now
+            completed_at = record.completed_at
+            if snapshot.status in TERMINAL_STATUSES and completed_at is None:
+                completed_at = now
+            record = replace(
+                record,
+                status=snapshot.status,
+                progress=snapshot.progress,
+                started_at=started_at,
+                completed_at=completed_at,
+                result=snapshot.result,
+                error=snapshot.error,
+            )
+            self._records[job_id] = record
+            return replace(record)
+
+    def fail_submission(self, job_id: str, error: ProviderErrorDetails) -> ImageJobRecord:
+        return self.apply_snapshot(job_id, ProviderSnapshot("failed", None, error=error))
+
+    def _required(self, job_id: str) -> ImageJobRecord:
+        record = self._records.get(job_id)
+        if record is None:
+            raise ImageJobNotFoundError(job_id)
+        return record

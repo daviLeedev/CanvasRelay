@@ -92,7 +92,8 @@ export function useImageGenerationJob() {
     isBusy,
     isSubmitting: createMutation.isPending,
     isCanceling: cancelMutation.isPending,
-    hasError: createMutation.isError || jobQuery.isError || cancelMutation.isError,
+    hasError:
+      createMutation.isError || jobQuery.isError || cancelMutation.isError || job?.status === "failed",
     canRetry: lastRequest !== null || (jobQuery.isError && activeId !== null),
   };
 }

@@ -30,7 +30,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
         <div className={styles.sidebarStatus}>
           <Activity aria-hidden="true" size={16} />
-          <span>Demo workspace</span>
+          <span>Provider relay</span>
         </div>
       </aside>
 

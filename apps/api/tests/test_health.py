@@ -25,7 +25,7 @@ def test_health_returns_the_public_contract() -> None:
 
 
 def test_health_reflects_demo_mode_configuration() -> None:
-    client = TestClient(create_app(Settings(env="test", demo_mode=False)))
+    client = TestClient(create_app(Settings(env="test", image_provider="comfyui")))
 
     response = client.get("/api/v1/health")
 

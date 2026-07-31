@@ -1,17 +1,55 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from hashlib import sha256
 from html import escape
 from typing import Literal
 
 type AspectRatio = Literal["1:1", "4:3", "3:4", "16:9"]
 type ImageStyle = Literal["editorial", "product", "concept"]
-type ImageJobStatus = Literal["queued", "running", "completed", "canceled"]
+type ImageProviderName = Literal["demo", "comfyui"]
+type ImageJobStatus = Literal["queued", "running", "completed", "failed", "canceled"]
+type ImageMimeType = Literal["image/svg+xml", "image/png", "image/jpeg", "image/webp"]
 
-QUEUE_DURATION = timedelta(milliseconds=750)
-RUN_DURATION = timedelta(milliseconds=2750)
+
+@dataclass(frozen=True, slots=True)
+class ProviderErrorDetails:
+    code: str
+    message: str
+    action: str
+    retryable: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderResult:
+    mime_type: ImageMimeType
+    width: int
+    height: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderSnapshot:
+    status: ImageJobStatus
+    progress: int | None
+    result: ProviderResult | None = None
+    error: ProviderErrorDetails | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderContent:
+    body: bytes
+    mime_type: ImageMimeType
+
+
+@dataclass(frozen=True, slots=True)
+class ImageGenerationRequest:
+    job_id: str
+    prompt: str
+    aspect_ratio: AspectRatio
+    style: ImageStyle
+    seed: int
+    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,16 +59,15 @@ class ImageJobRecord:
     aspect_ratio: AspectRatio
     style: ImageStyle
     seed: int
+    provider: ImageProviderName
     created_at: datetime
-    canceled_at: datetime | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ImageJobState:
-    status: ImageJobStatus
-    progress: int
-    started_at: datetime | None
-    completed_at: datetime | None
+    provider_job_id: str | None = None
+    status: ImageJobStatus = "queued"
+    progress: int | None = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: ProviderResult | None = None
+    error: ProviderErrorDetails | None = None
 
 
 def normalize_prompt(prompt: str) -> str:
@@ -49,22 +86,6 @@ def resolve_seed(
     return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
 
 
-def calculate_state(record: ImageJobRecord, now: datetime) -> ImageJobState:
-    queued_until = record.created_at + QUEUE_DURATION
-    completed_at = queued_until + RUN_DURATION
-
-    if record.canceled_at is not None:
-        started_at = queued_until if record.canceled_at >= queued_until else None
-        return ImageJobState("canceled", 0, started_at, None)
-    if now < queued_until:
-        return ImageJobState("queued", 0, None, None)
-    if now < completed_at:
-        elapsed = (now - queued_until).total_seconds()
-        fraction = elapsed / RUN_DURATION.total_seconds()
-        return ImageJobState("running", min(95, 8 + round(fraction * 87)), queued_until, None)
-    return ImageJobState("completed", 100, queued_until, completed_at)
-
-
 def image_dimensions(aspect_ratio: AspectRatio) -> tuple[int, int]:
     return {
         "1:1": (1024, 1024),
@@ -74,23 +95,23 @@ def image_dimensions(aspect_ratio: AspectRatio) -> tuple[int, int]:
     }[aspect_ratio]
 
 
-def render_demo_svg(record: ImageJobRecord) -> str:
-    width, height = image_dimensions(record.aspect_ratio)
-    source = f"{record.prompt}\0{record.aspect_ratio}\0{record.style}\0{record.seed}"
+def render_demo_svg(request: ImageGenerationRequest) -> str:
+    width, height = image_dimensions(request.aspect_ratio)
+    source = f"{request.prompt}\0{request.aspect_ratio}\0{request.style}\0{request.seed}"
     digest = sha256(source.encode()).digest()
     palettes = {
         "editorial": ("#142126", "#d8e4dc", "#d16f52", "#7ea29a", "#edf2ee"),
         "product": ("#111923", "#dbe6f5", "#4f83c2", "#d4a84d", "#f3f6fa"),
         "concept": ("#18161d", "#e0d9e6", "#a35d7b", "#6f9285", "#f2eef4"),
     }
-    background, paper, accent, secondary, ink = palettes[record.style]
+    background, paper, accent, secondary, ink = palettes[request.style]
     inset = max(28, width // 24)
     header_height = max(76, height // 9)
     block_width = int(width * (0.46 + (digest[0] / 255) * 0.12))
     horizon = int(height * (0.48 + (digest[1] / 255) * 0.12))
     diagonal = int(width * (0.16 + (digest[2] / 255) * 0.1))
-    prompt = escape(normalize_prompt(record.prompt)[:96], quote=True)
-    style_label = escape(record.style.upper(), quote=True)
+    prompt = escape(normalize_prompt(request.prompt)[:96], quote=True)
+    style_label = escape(request.style.upper(), quote=True)
 
     lines = []
     for index in range(7):
@@ -126,6 +147,6 @@ def render_demo_svg(record: ImageJobRecord) -> str:
         f'font-family="Arial, sans-serif" font-size="{max(14, width // 55)}">{prompt}</text>'
         f'<text x="{width - inset * 1.5}" y="{height - inset * 1.8:.0f}" fill="{background}" '
         f'font-family="Arial, sans-serif" font-size="{max(12, width // 68)}" text-anchor="end">'
-        f'{style_label} / {record.seed}</text>'
+        f'{style_label} / {request.seed}</text>'
         "</svg>"
     )

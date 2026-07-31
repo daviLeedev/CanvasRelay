@@ -133,6 +133,15 @@
   text-transform: uppercase;
 }
 
+.panelHeading .demoPill[data-mode="live"] {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+  color: var(--success);
+}
+
+.panelHeading .demoPill[data-mode="checking"] {
+  color: var(--text-muted);
+}
+
 .generationForm {
   display: grid;
   gap: var(--space-3);
@@ -403,6 +412,10 @@
 
 .jobCard[data-status="queued"] .jobCardTopline svg {
   color: var(--warning);
+}
+
+.jobCard[data-status="failed"] .jobCardTopline svg {
+  color: var(--danger);
 }
 
 .jobName {

@@ -12,6 +12,7 @@ const statusColors: Record<JobStatus, string> = {
   queued: "#efb74e",
   running: "#6f9cff",
   completed: "#48c992",
+  failed: "#ef6b73",
   canceled: "#8793a1",
 };
 
@@ -202,7 +203,7 @@ export function StudioStage3D({
             onClick={() => onSelect(job.id)}
           >
             <span>{job.name}</span>
-            <strong>{job.progress}%</strong>
+            <strong>{job.progress === null ? "--" : `${job.progress}%`}</strong>
           </button>
         ))}
       </div>

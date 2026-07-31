@@ -2,98 +2,135 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from app.api.schemas import ImageJobCreate, ImageJobResponse, ImageJobResult, ImageJobSettings
-from app.domain.image_jobs import ImageJobRecord, calculate_state, image_dimensions, render_demo_svg
-from app.repositories.image_jobs import ImageJobNotFoundError, ImageJobRepository
+from app.api.schemas import (
+    ImageJobCreate,
+    ImageJobError,
+    ImageJobResponse,
+    ImageJobResult,
+    ImageJobSettings,
+)
+from app.domain.image_jobs import ImageJobRecord
+from app.providers.base import ImageProviderError
+from app.repositories.image_jobs import ImageJobNotFoundError
+from app.services.image_jobs import ImageJobService
 
 router = APIRouter(prefix="/image-jobs", tags=["image jobs"])
 
 
-def get_image_job_repository(request: Request) -> ImageJobRepository:
-    return cast(ImageJobRepository, request.app.state.image_jobs)
+def get_image_job_service(request: Request) -> ImageJobService:
+    return cast(ImageJobService, request.app.state.image_job_service)
 
 
-def _get_or_404(repository: ImageJobRepository, job_id: str) -> ImageJobRecord:
-    try:
-        return repository.get(job_id)
-    except ImageJobNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Image job was not found.") from error
-
-
-def _to_response(repository: ImageJobRepository, record: ImageJobRecord) -> ImageJobResponse:
-    state = calculate_state(record, repository.now())
+def _to_response(record: ImageJobRecord) -> ImageJobResponse:
     result = None
-    if state.status == "completed":
-        width, height = image_dimensions(record.aspect_ratio)
+    if record.status == "completed" and record.result is not None:
         result = ImageJobResult(
             url=f"/api/v1/image-jobs/{record.id}/result",
-            mimeType="image/svg+xml",
-            width=width,
-            height=height,
+            mimeType=record.result.mime_type,
+            width=record.result.width,
+            height=record.result.height,
+        )
+    error = None
+    if record.error is not None:
+        error = ImageJobError(
+            code=record.error.code,
+            message=record.error.message,
+            action=record.error.action,
+            retryable=record.error.retryable,
         )
     return ImageJobResponse(
         id=record.id,
-        status=state.status,
-        progress=state.progress,
+        status=record.status,
+        progress=record.progress,
         prompt=record.prompt,
         settings=ImageJobSettings(
             aspectRatio=record.aspect_ratio,
             style=record.style,
             seed=record.seed,
+            provider=record.provider,
         ),
         createdAt=record.created_at,
-        startedAt=state.started_at,
-        completedAt=state.completed_at,
+        startedAt=record.started_at,
+        completedAt=record.completed_at,
         result=result,
-        error=None,
+        error=error,
+    )
+
+
+def _not_found(error: ImageJobNotFoundError) -> HTTPException:
+    return HTTPException(status_code=404, detail="Image job was not found.")
+
+
+def _provider_unavailable(error: ImageProviderError) -> HTTPException:
+    conflict_codes = {
+        "result_not_ready",
+        "workflow_missing",
+        "workflow_invalid",
+        "workflow_bindings_missing",
+    }
+    return HTTPException(
+        status_code=409 if error.details.code in conflict_codes else 503,
+        detail={
+            "code": error.details.code,
+            "message": error.details.message,
+            "action": error.details.action,
+        },
     )
 
 
 @router.post("", response_model=ImageJobResponse, status_code=status.HTTP_201_CREATED)
 async def create_image_job(
     payload: ImageJobCreate,
-    repository: Annotated[ImageJobRepository, Depends(get_image_job_repository)],
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
 ) -> ImageJobResponse:
-    record = repository.create(
+    record = await service.create(
         prompt=payload.prompt,
         aspect_ratio=payload.aspect_ratio,
         style=payload.style,
         seed=payload.seed,
     )
-    return _to_response(repository, record)
+    return _to_response(record)
 
 
 @router.get("/{job_id}", response_model=ImageJobResponse)
 async def get_image_job(
     job_id: str,
-    repository: Annotated[ImageJobRepository, Depends(get_image_job_repository)],
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
 ) -> ImageJobResponse:
-    return _to_response(repository, _get_or_404(repository, job_id))
+    try:
+        return _to_response(await service.get(job_id))
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
 
 
 @router.delete("/{job_id}", response_model=ImageJobResponse)
 async def cancel_image_job(
     job_id: str,
-    repository: Annotated[ImageJobRepository, Depends(get_image_job_repository)],
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
 ) -> ImageJobResponse:
     try:
-        record = repository.cancel(job_id)
+        return _to_response(await service.cancel(job_id))
     except ImageJobNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Image job was not found.") from error
-    return _to_response(repository, record)
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
 
 
 @router.get("/{job_id}/result", response_class=Response)
 async def get_image_job_result(
     job_id: str,
-    repository: Annotated[ImageJobRepository, Depends(get_image_job_repository)],
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
 ) -> Response:
-    record = _get_or_404(repository, job_id)
-    state = calculate_state(record, repository.now())
-    if state.status != "completed":
-        raise HTTPException(status_code=409, detail="Image result is not ready.")
+    try:
+        content = await service.collect(job_id)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
     return Response(
-        content=render_demo_svg(record),
-        media_type="image/svg+xml",
+        content=content.body,
+        media_type=content.mime_type,
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )

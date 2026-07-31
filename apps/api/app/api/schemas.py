@@ -3,7 +3,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.image_jobs import AspectRatio, ImageJobStatus, ImageStyle
+from app.domain.image_jobs import (
+    AspectRatio,
+    ImageJobStatus,
+    ImageMimeType,
+    ImageProviderName,
+    ImageStyle,
+)
 
 
 class ApiModel(BaseModel):
@@ -36,11 +42,12 @@ class ImageJobSettings(ApiModel):
     aspect_ratio: AspectRatio = Field(alias="aspectRatio")
     style: ImageStyle
     seed: int
+    provider: ImageProviderName
 
 
 class ImageJobResult(ApiModel):
     url: str
-    mime_type: Literal["image/svg+xml"] = Field(alias="mimeType")
+    mime_type: ImageMimeType = Field(alias="mimeType")
     width: int
     height: int
 
@@ -55,7 +62,7 @@ class ImageJobError(ApiModel):
 class ImageJobResponse(ApiModel):
     id: str
     status: ImageJobStatus
-    progress: int = Field(ge=0, le=100)
+    progress: int | None = Field(ge=0, le=100)
     prompt: str
     settings: ImageJobSettings
     created_at: datetime = Field(alias="createdAt")
@@ -63,3 +70,11 @@ class ImageJobResponse(ApiModel):
     completed_at: datetime | None = Field(alias="completedAt")
     result: ImageJobResult | None
     error: ImageJobError | None
+
+
+class ImageProviderResponse(ApiModel):
+    provider: ImageProviderName
+    mode: Literal["demo", "live"]
+    label: str
+    ready: bool
+    message: str

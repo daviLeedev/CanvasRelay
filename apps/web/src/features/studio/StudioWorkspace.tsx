@@ -10,6 +10,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useHealthQuery } from "@/lib/api/useHealthQuery";
+import { useImageProviderQuery } from "@/lib/api/useImageProviderQuery";
 
 import { StudioStage2D } from "./StudioStage2D";
 import { ThreeStageBoundary } from "./ThreeStageBoundary";
@@ -32,10 +33,11 @@ const modeOptions = [
   { value: "3d", label: "3D", icon: <Box aria-hidden="true" size={14} /> },
 ] as const;
 
-const statusTone: Record<JobStatus, "success" | "warning" | "neutral"> = {
+const statusTone: Record<JobStatus, "success" | "warning" | "neutral" | "danger"> = {
   queued: "warning",
   running: "neutral",
   completed: "success",
+  failed: "danger",
   canceled: "neutral",
 };
 
@@ -58,6 +60,7 @@ function ApiToolbarStatus() {
 export function StudioWorkspace() {
   const { jobs: sampleJobs, restart } = useDemoJobs();
   const imageGeneration = useImageGenerationJob();
+  const imageProvider = useImageProviderQuery();
   const { mode, setMode } = useDisplayPreference();
   const reducedMotion = useReducedMotion();
   const pageVisible = usePageVisibility();
@@ -156,6 +159,8 @@ export function StudioWorkspace() {
               isCanceling={imageGeneration.isCanceling}
               hasError={imageGeneration.hasError}
               canRetry={imageGeneration.canRetry}
+              provider={imageProvider.data ?? null}
+              providerStatusUnavailable={imageProvider.isError}
               onSubmit={submitImageJob}
               onCancel={imageGeneration.cancel}
               onRetry={retryImageJob}
@@ -188,11 +193,15 @@ export function StudioWorkspace() {
                     <div className={styles.progressBlock}>
                       <div>
                         <span>Progress</span>
-                        <strong>{selectedJob.progress}%</strong>
+                        <strong>
+                          {selectedJob.progress === null ? "Unavailable" : `${selectedJob.progress}%`}
+                        </strong>
                       </div>
-                      <span className={styles.inspectorProgress} aria-hidden="true">
-                        <span style={{ width: `${selectedJob.progress}%` }} />
-                      </span>
+                      {selectedJob.progress !== null ? (
+                        <span className={styles.inspectorProgress} aria-hidden="true">
+                          <span style={{ width: `${selectedJob.progress}%` }} />
+                        </span>
+                      ) : null}
                     </div>
 
                     <dl className={styles.jobDetails}>
@@ -221,6 +230,10 @@ export function StudioWorkspace() {
                           <div>
                             <dt>Seed</dt>
                             <dd>{selectedJob.imageJob.settings.seed}</dd>
+                          </div>
+                          <div>
+                            <dt>Provider</dt>
+                            <dd>{selectedJob.imageJob.settings.provider}</dd>
                           </div>
                           <div>
                             <dt>Created</dt>

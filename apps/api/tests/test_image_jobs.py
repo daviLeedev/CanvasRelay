@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
+from app.providers.demo import DemoImageProvider
 from app.repositories.image_jobs import ImageJobRepository
 
 
@@ -21,7 +22,10 @@ class MutableClock:
 
 def make_client(clock: MutableClock) -> TestClient:
     repository = ImageJobRepository(clock)
-    return TestClient(create_app(Settings(env="test"), image_jobs=repository))
+    provider = DemoImageProvider(clock)
+    return TestClient(
+        create_app(Settings(env="test"), image_jobs=repository, image_provider=provider)
+    )
 
 
 def create_job(client: TestClient, *, prompt: str = "A precise studio still") -> dict[str, object]:
@@ -46,9 +50,29 @@ def test_create_validates_input_and_returns_a_typed_queued_job() -> None:
     assert invalid.status_code == 422
     assert created["status"] == "queued"
     assert created["progress"] == 0
-    assert created["settings"] == {"aspectRatio": "4:3", "style": "editorial", "seed": 42}
+    assert created["settings"] == {
+        "aspectRatio": "4:3",
+        "style": "editorial",
+        "seed": 42,
+        "provider": "demo",
+    }
     assert created["result"] is None
     assert created["error"] is None
+
+
+def test_image_provider_status_is_public_and_redacted() -> None:
+    client = make_client(MutableClock())
+
+    response = client.get("/api/v1/providers/image")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": "demo",
+        "mode": "demo",
+        "label": "Deterministic demo",
+        "ready": True,
+        "message": "Ready without a GPU or model files.",
+    }
 
 
 def test_job_moves_from_queued_to_running_to_completed_from_elapsed_time() -> None:

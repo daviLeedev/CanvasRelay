@@ -17,6 +17,6 @@ async def health(
         status="ok",
         service="canvasrelay-api",
         version=settings.app_version,
-        demoMode=settings.demo_mode,
+        demoMode=settings.active_image_provider == "demo",
         timestamp=datetime.now(UTC),
     )

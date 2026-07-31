@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
 import type { ImageJobCreate, ImageJobResponse } from "@/lib/api/imageJobs";
+import type { ImageProviderResponse } from "@/lib/api/imageProvider";
 
 import { DemoResultPreview } from "./DemoResultPreview";
 import styles from "./studio.module.css";
@@ -18,6 +19,8 @@ type ImageGenerationPanelProps = {
   isCanceling: boolean;
   hasError: boolean;
   canRetry: boolean;
+  provider: ImageProviderResponse | null;
+  providerStatusUnavailable: boolean;
   onSubmit: (input: ImageJobCreate) => Promise<void>;
   onCancel: () => Promise<unknown>;
   onRetry: () => Promise<unknown>;
@@ -30,6 +33,8 @@ export function ImageGenerationPanel({
   isCanceling,
   hasError,
   canRetry,
+  provider,
+  providerStatusUnavailable,
   onSubmit,
   onCancel,
   onRetry,
@@ -38,7 +43,7 @@ export function ImageGenerationPanel({
   const [aspectRatio, setAspectRatio] = useState<ImageJobCreate["aspectRatio"]>("4:3");
   const [style, setStyle] = useState<ImageJobCreate["style"]>("editorial");
   const [seed, setSeed] = useState("");
-  const canGenerate = prompt.trim().length > 0 && !isBusy;
+  const canGenerate = prompt.trim().length > 0 && !isBusy && provider?.ready !== false;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,19 +58,28 @@ export function ImageGenerationPanel({
   }
 
   const active = job?.status === "queued" || job?.status === "running";
+  const progressLabel = job?.progress === null ? "Unavailable" : `${job?.progress ?? 0}%`;
+  const providerLabel = provider?.label ?? "Image provider";
+  const providerMode = provider?.mode === "live" ? "Live" : "Demo";
 
   return (
     <section className={styles.generationPanel} aria-labelledby="generation-panel-title">
       <header className={styles.panelHeading}>
         <div>
-          <span>Deterministic provider</span>
+          <span>{providerLabel}</span>
           <h2 id="generation-panel-title">Generate image</h2>
         </div>
-        <span className={styles.demoPill}>Demo</span>
+        <span className={styles.demoPill} data-mode={provider?.mode ?? "checking"}>
+          {providerStatusUnavailable ? "Offline" : providerMode}
+        </span>
       </header>
 
       <form className={styles.generationForm} onSubmit={handleSubmit}>
-        <Field label="Prompt" htmlFor="image-prompt" hint="No external provider or GPU is used.">
+        <Field
+          label="Prompt"
+          htmlFor="image-prompt"
+          hint={provider?.message ?? "Checking the configured image provider."}
+        >
           <textarea
             className={styles.promptInput}
             id="image-prompt"
@@ -135,18 +149,23 @@ export function ImageGenerationPanel({
         <div className={styles.liveJob} aria-live="polite">
           <div>
             <span>{job.status}</span>
-            <strong>{job.progress}%</strong>
+            <strong>{progressLabel}</strong>
           </div>
-          <span className={styles.inspectorProgress} aria-hidden="true">
-            <span style={{ width: `${job.progress}%` }} />
-          </span>
+          {job.progress !== null ? (
+            <span className={styles.inspectorProgress} aria-hidden="true">
+              <span style={{ width: `${job.progress}%` }} />
+            </span>
+          ) : null}
         </div>
       ) : null}
 
       {hasError ? (
         <div className={styles.generationError} role="alert">
-          <strong>Generation request failed</strong>
-          <p>The demo service could not finish the request. Check the API status and try again.</p>
+          <strong>{job?.error?.message ?? "Generation request failed"}</strong>
+          <p>
+            {job?.error?.action ??
+              "The image service could not finish the request. Check the provider status and try again."}
+          </p>
           {canRetry ? (
             <Button type="button" onClick={() => void onRetry()}>
               <RotateCcw aria-hidden="true" size={14} />

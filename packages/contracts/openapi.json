@@ -157,10 +157,17 @@
             "type": "string"
           },
           "progress": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Progress",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
           },
           "prompt": {
             "title": "Prompt",
@@ -217,9 +224,7 @@
             "type": "integer"
           },
           "mimeType": {
-            "const": "image/svg+xml",
-            "title": "Mimetype",
-            "type": "string"
+            "$ref": "#/components/schemas/ImageMimeType"
           },
           "url": {
             "title": "Url",
@@ -244,6 +249,9 @@
           "aspectRatio": {
             "$ref": "#/components/schemas/AspectRatio"
           },
+          "provider": {
+            "$ref": "#/components/schemas/ImageProviderName"
+          },
           "seed": {
             "title": "Seed",
             "type": "integer"
@@ -255,7 +263,8 @@
         "required": [
           "aspectRatio",
           "style",
-          "seed"
+          "seed",
+          "provider"
         ],
         "title": "ImageJobSettings",
         "type": "object"
@@ -265,9 +274,62 @@
           "queued",
           "running",
           "completed",
+          "failed",
           "canceled"
         ],
         "type": "string"
+      },
+      "ImageMimeType": {
+        "enum": [
+          "image/svg+xml",
+          "image/png",
+          "image/jpeg",
+          "image/webp"
+        ],
+        "type": "string"
+      },
+      "ImageProviderName": {
+        "enum": [
+          "demo",
+          "comfyui"
+        ],
+        "type": "string"
+      },
+      "ImageProviderResponse": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "demo",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ImageProviderName"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "mode",
+          "label",
+          "ready",
+          "message"
+        ],
+        "title": "ImageProviderResponse",
+        "type": "object"
       },
       "ImageStyle": {
         "enum": [
@@ -320,7 +382,7 @@
     }
   },
   "info": {
-    "description": "Public API foundation for the CanvasRelay studio.",
+    "description": "Public orchestration API for the CanvasRelay studio.",
     "title": "CanvasRelay API",
     "version": "0.1.0"
   },
@@ -502,6 +564,27 @@
         "summary": "Get Image Job Result",
         "tags": [
           "image jobs"
+        ]
+      }
+    },
+    "/api/v1/providers/image": {
+      "get": {
+        "operationId": "get_image_provider_api_v1_providers_image_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Image Provider",
+        "tags": [
+          "providers"
         ]
       }
     }
