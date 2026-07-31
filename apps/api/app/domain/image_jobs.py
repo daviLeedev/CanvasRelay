@@ -12,6 +12,37 @@ type ImageProviderName = Literal["demo", "comfyui"]
 type ImageJobStatus = Literal["queued", "running", "completed", "failed", "canceled"]
 type ImageMimeType = Literal["image/svg+xml", "image/png", "image/jpeg", "image/webp"]
 type ImageJobOperation = Literal["generate", "edit"]
+type ImageProgressPhase = Literal[
+    "queued",
+    "uploading",
+    "preparing",
+    "sampling",
+    "saving",
+    "completed",
+    "failed",
+    "canceled",
+]
+type ImageProgressSource = Literal["provider", "inferred", "unknown"]
+type EditFitMode = Literal["fit", "crop"]
+
+
+@dataclass(frozen=True, slots=True)
+class LoraSelection:
+    id: str
+    model_weight: float
+    clip_weight: float
+
+
+@dataclass(frozen=True, slots=True)
+class ImageEditSettings:
+    steps: int = 8
+    cfg: float = 1.0
+    reference_influence: float = 4.0
+    grounding_resolution: int = 768
+    fit_mode: EditFitMode = "fit"
+    sampler: str = "euler"
+    scheduler: str = "simple"
+    loras: tuple[LoraSelection, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +66,12 @@ class ProviderSnapshot:
     progress: int | None
     result: ProviderResult | None = None
     error: ProviderErrorDetails | None = None
+    phase: ImageProgressPhase = "queued"
+    current_step: int | None = None
+    total_steps: int | None = None
+    progress_source: ImageProgressSource = "unknown"
+    progress_updated_at: datetime | None = None
+    stalled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +88,7 @@ class ImageGenerationRequest:
     style: ImageStyle
     seed: int
     created_at: datetime
+    edit_settings: ImageEditSettings | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,10 +102,19 @@ class ImageJobRecord:
     created_at: datetime
     operation: ImageJobOperation = "generate"
     source_path: str | None = None
+    source_job_id: str | None = None
     face_reference_path: str | None = None
+    edit_settings: ImageEditSettings | None = None
     provider_job_id: str | None = None
     status: ImageJobStatus = "queued"
     progress: int | None = 0
+    phase: ImageProgressPhase = "queued"
+    current_step: int | None = None
+    total_steps: int | None = None
+    progress_source: ImageProgressSource = "unknown"
+    progress_updated_at: datetime | None = None
+    stalled: bool = False
+    estimated_remaining_seconds: int | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     result: ProviderResult | None = None

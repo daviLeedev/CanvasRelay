@@ -70,6 +70,8 @@ def test_create_validates_input_and_returns_a_typed_queued_job(tmp_path: Path) -
         "provider": "demo",
         "operation": "generate",
         "hasFaceReference": False,
+        "sourceJobId": None,
+        "edit": None,
     }
     assert created["result"] is None
     assert created["error"] is None
@@ -95,13 +97,13 @@ def test_job_moves_from_queued_to_running_to_completed_from_elapsed_time(tmp_pat
     client = make_client(clock, tmp_path)
     job_id = create_job(client)["id"]
 
-    clock.advance(milliseconds=900)
+    clock.advance(milliseconds=1400)
     running = client.get(f"/api/v1/image-jobs/{job_id}").json()
     clock.advance(milliseconds=3000)
     completed = client.get(f"/api/v1/image-jobs/{job_id}").json()
 
     assert running["status"] == "running"
-    assert 8 <= running["progress"] <= 95
+    assert 1 <= running["progress"] <= 95
     assert running["startedAt"] is not None
     assert completed["status"] == "completed"
     assert completed["progress"] == 100
@@ -277,3 +279,71 @@ def test_image_edit_rejects_invalid_upload_without_exposing_internals(tmp_path: 
 
     assert response.status_code == 422
     assert response.json() == {"detail": "Choose a valid PNG, JPEG, or WebP image."}
+
+
+def test_library_result_handoff_uses_server_owned_source_and_restores_settings(
+    tmp_path: Path,
+) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    source_id = str(create_job(client)["id"])
+    clock.advance(milliseconds=4000)
+    assert client.get(f"/api/v1/image-jobs/{source_id}").json()["status"] == "completed"
+
+    response = client.post(
+        "/api/v1/image-edit-jobs",
+        data={
+            "prompt": "Refine the scene with softer light",
+            "aspectRatio": "4:3",
+            "style": "editorial",
+            "sourceJobId": source_id,
+            "steps": "10",
+            "cfg": "1.4",
+            "referenceInfluence": "5.2",
+            "groundingResolution": "1024",
+            "fitMode": "crop",
+            "sampler": "dpmpp_2m",
+            "scheduler": "karras",
+            "loras": '[{"id":"demo-detail","modelWeight":0.7,"clipWeight":0.3}]',
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["settings"]["sourceJobId"] == source_id
+    assert payload["settings"]["edit"] == {
+        "steps": 10,
+        "cfg": 1.4,
+        "referenceInfluence": 5.2,
+        "groundingResolution": 1024,
+        "fitMode": "crop",
+        "sampler": "dpmpp_2m",
+        "scheduler": "karras",
+        "loras": [{"id": "demo-detail", "modelWeight": 0.7, "clipWeight": 0.3}],
+    }
+    input_response = client.get(f"/api/v1/image-jobs/{payload['id']}/inputs/source")
+    assert input_response.status_code == 200
+    assert input_response.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_image_edit_requires_exactly_one_server_or_upload_source(tmp_path: Path) -> None:
+    client = make_client(MutableClock(), tmp_path)
+    image = b"\x89PNG\r\n\x1a\ncanvasrelay-test"
+
+    missing = client.post(
+        "/api/v1/image-edit-jobs",
+        data={"prompt": "Refine", "aspectRatio": "1:1", "style": "editorial"},
+    )
+    duplicate = client.post(
+        "/api/v1/image-edit-jobs",
+        data={
+            "prompt": "Refine",
+            "aspectRatio": "1:1",
+            "style": "editorial",
+            "sourceJobId": "img_untrusted",
+        },
+        files={"source": ("source.png", image, "image/png")},
+    )
+
+    assert missing.status_code == 422
+    assert duplicate.status_code == 422

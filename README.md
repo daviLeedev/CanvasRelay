@@ -92,6 +92,22 @@ server. The browser never receives the ComfyUI address or workflow path.
 See [the ComfyUI adapter example](examples/comfyui/README.md) for the template,
 status behavior, cancellation limits, and safe setup details.
 
+Image edit options are read from ComfyUI's `object_info` response. Optional
+LoRAs are exposed only through an ignored local allowlist configured with
+`CANVASRELAY_COMFYUI_EDIT_LORA_ALLOWLIST_PATH`. The file uses neutral public
+IDs and labels while keeping local filenames server-side:
+
+```json
+{
+  "loras": [
+    { "id": "detail", "label": "Detail enhancer", "filename": "folder/file.safetensors" }
+  ]
+}
+```
+
+The API stores the selected order and independent model/CLIP weights in job
+metadata. Neither the allowlist nor workflow JSON belongs in the repository.
+
 ## Documentation
 
 Architecture, product, migration, and decision records are available in the

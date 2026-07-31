@@ -1,18 +1,30 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import cast
+
 from app.domain.image_jobs import (
     AspectRatio,
+    ImageEditSettings,
     ImageGenerationRequest,
     ImageJobOperation,
     ImageJobRecord,
     ImageJobStatus,
+    ImageMimeType,
     ImageProviderName,
     ImageStyle,
     ProviderContent,
     ProviderErrorDetails,
     ProviderSnapshot,
 )
-from app.providers.base import ImageGenerationProvider, ImageProviderError, ProviderDescriptor
+from app.providers.base import (
+    ImageEditProviderOptions,
+    ImageGenerationProvider,
+    ImageProviderError,
+    ProviderDescriptor,
+)
 from app.repositories.image_jobs import TERMINAL_STATUSES, ImageJobRepository
 from app.repositories.media import (
     FilesystemMediaStore,
@@ -47,6 +59,9 @@ class ImageJobService:
     async def describe_edit_provider(self) -> ProviderDescriptor:
         return await self.provider.describe_edit()
 
+    async def describe_edit_options(self) -> ImageEditProviderOptions:
+        return await self.provider.describe_edit_options()
+
     async def create(
         self,
         *,
@@ -76,9 +91,17 @@ class ImageJobService:
         aspect_ratio: AspectRatio,
         style: ImageStyle,
         seed: int | None,
-        source: ProviderContent,
+        source: ProviderContent | None,
+        source_job_id: str | None,
         face_reference: ProviderContent | None,
+        edit_settings: ImageEditSettings,
     ) -> ImageJobRecord:
+        if (source is None) == (source_job_id is None):
+            raise ImageProviderError(self._source_choice_error())
+        if source_job_id is not None:
+            source = await self._resolve_source_job(source_job_id)
+        if source is None:
+            raise ImageProviderError(self._source_choice_error())
         record = self.repository.create(
             prompt=prompt,
             aspect_ratio=aspect_ratio,
@@ -86,6 +109,7 @@ class ImageJobService:
             seed=seed,
             provider=self.provider.name,
             operation="edit",
+            edit_settings=edit_settings,
         )
         try:
             source_path = self.upload_store.save(record.id, "source", source)
@@ -97,6 +121,7 @@ class ImageJobService:
             record = self.repository.attach_inputs(
                 record.id,
                 source_path=source_path,
+                source_job_id=source_job_id,
                 face_reference_path=face_path,
             )
             provider_job_id = await self.provider.submit_edit(
@@ -132,18 +157,25 @@ class ImageJobService:
     async def get(self, job_id: str) -> ImageJobRecord:
         record = self.repository.get(job_id)
         if record.status in TERMINAL_STATUSES:
-            return record
+            return self._with_estimate(record)
         if record.provider_job_id is None:
-            return record
+            return self._with_estimate(record)
         if record.provider != self.provider.name:
-            return self.repository.apply_snapshot(
-                record.id,
-                ProviderSnapshot("failed", None, error=self._provider_mismatch_error()),
+            return self._with_estimate(
+                self.repository.apply_snapshot(
+                    record.id,
+                    ProviderSnapshot(
+                        "failed",
+                        None,
+                        error=self._provider_mismatch_error(),
+                        phase="failed",
+                    ),
+                )
             )
         snapshot = await self.provider.poll(record.provider_job_id)
         if snapshot.status == "completed":
             return await self._persist_completed(record, snapshot)
-        return self.repository.apply_snapshot(job_id, snapshot)
+        return self._with_estimate(self.repository.apply_snapshot(job_id, snapshot))
 
     async def cancel(self, job_id: str) -> ImageJobRecord:
         record = self.repository.get(job_id)
@@ -161,6 +193,16 @@ class ImageJobService:
         except MediaNotFoundError as error:
             raise ImageProviderError(self._stored_result_missing_error()) from error
 
+    async def collect_input(self, job_id: str, role: str) -> ProviderContent:
+        record = self.repository.get(job_id)
+        path = record.source_path if role == "source" else record.face_reference_path
+        if role not in {"source", "identity"} or path is None:
+            raise ImageProviderError(self._stored_input_missing_error())
+        try:
+            return self.upload_store.read(path, self._mime_for_path(path))
+        except (MediaNotFoundError, ValueError) as error:
+            raise ImageProviderError(self._stored_input_missing_error()) from error
+
     async def _persist_completed(
         self,
         record: ImageJobRecord,
@@ -171,6 +213,18 @@ class ImageJobService:
                 record.id,
                 ProviderSnapshot("failed", None, error=self._result_not_ready_error()),
             )
+        self.repository.apply_snapshot(
+            record.id,
+            ProviderSnapshot(
+                "running",
+                snapshot.progress,
+                phase="saving",
+                current_step=snapshot.current_step,
+                total_steps=snapshot.total_steps,
+                progress_source=snapshot.progress_source,
+                progress_updated_at=snapshot.progress_updated_at,
+            ),
+        )
         try:
             content = await self.provider.collect(record.provider_job_id)
             result_path = self.media_store.save(record.id, content)
@@ -184,10 +238,8 @@ class ImageJobService:
                 record.id,
                 ProviderSnapshot("failed", None, error=details),
             )
-        return self.repository.apply_snapshot(
-            record.id,
-            snapshot,
-            result_path=result_path,
+        return self._with_estimate(
+            self.repository.apply_snapshot(record.id, snapshot, result_path=result_path)
         )
 
     def _resume_active_jobs(self) -> None:
@@ -205,7 +257,43 @@ class ImageJobService:
             style=record.style,
             seed=record.seed,
             created_at=record.created_at,
+            edit_settings=record.edit_settings,
         )
+
+    async def _resolve_source_job(self, job_id: str) -> ProviderContent:
+        try:
+            record = self.repository.get(job_id)
+        except KeyError as error:
+            raise ImageProviderError(self._source_job_invalid_error()) from error
+        if record.status != "completed" or record.result is None or record.result_path is None:
+            raise ImageProviderError(self._source_job_invalid_error())
+        try:
+            return self.media_store.read(record.result_path, record.result.mime_type)
+        except (MediaNotFoundError, ValueError) as error:
+            raise ImageProviderError(self._source_job_invalid_error()) from error
+
+    def _with_estimate(self, record: ImageJobRecord) -> ImageJobRecord:
+        if record.status not in {"queued", "running"} or record.started_at is None:
+            return record
+        typical = self.repository.median_duration_seconds(record)
+        if typical is None:
+            return record
+        elapsed = max(0.0, (datetime.now(UTC) - record.started_at).total_seconds())
+        return replace(record, estimated_remaining_seconds=max(0, round(typical - elapsed)))
+
+    @staticmethod
+    def _mime_for_path(path: str) -> ImageMimeType:
+        suffix = Path(path).suffix.lower()
+        mime_type = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".svg": "image/svg+xml",
+        }.get(suffix)
+        if mime_type is None:
+            raise ValueError("Unsupported stored image type.")
+        return cast(ImageMimeType, mime_type)
 
     @staticmethod
     def _result_not_ready_error() -> ProviderErrorDetails:
@@ -250,4 +338,31 @@ class ImageJobService:
             "CanvasRelay could not store the selected image.",
             "Check the configured data directory and choose the image again.",
             True,
+        )
+
+    @staticmethod
+    def _source_choice_error() -> ProviderErrorDetails:
+        return ProviderErrorDetails(
+            "edit_source_invalid",
+            "Choose one source image for this edit.",
+            "Upload an image or select one completed Library result.",
+            False,
+        )
+
+    @staticmethod
+    def _source_job_invalid_error() -> ProviderErrorDetails:
+        return ProviderErrorDetails(
+            "library_source_invalid",
+            "The selected Library image is not available for editing.",
+            "Choose another completed image result.",
+            False,
+        )
+
+    @staticmethod
+    def _stored_input_missing_error() -> ProviderErrorDetails:
+        return ProviderErrorDetails(
+            "stored_input_missing",
+            "The saved edit input is no longer available.",
+            "Choose the source image again.",
+            False,
         )

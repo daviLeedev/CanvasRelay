@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 
@@ -5,9 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.image_jobs import (
     AspectRatio,
+    EditFitMode,
     ImageJobOperation,
     ImageJobStatus,
     ImageMimeType,
+    ImageProgressPhase,
+    ImageProgressSource,
     ImageProviderName,
     ImageStyle,
 )
@@ -46,6 +51,25 @@ class ImageJobSettings(ApiModel):
     provider: ImageProviderName
     operation: ImageJobOperation
     has_face_reference: bool = Field(alias="hasFaceReference")
+    source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    edit: ImageEditSettingsResponse | None = None
+
+
+class LoraSelectionResponse(ApiModel):
+    id: str
+    model_weight: float = Field(alias="modelWeight")
+    clip_weight: float = Field(alias="clipWeight")
+
+
+class ImageEditSettingsResponse(ApiModel):
+    steps: int
+    cfg: float
+    reference_influence: float = Field(alias="referenceInfluence")
+    grounding_resolution: int = Field(alias="groundingResolution")
+    fit_mode: EditFitMode = Field(alias="fitMode")
+    sampler: str
+    scheduler: str
+    loras: list[LoraSelectionResponse]
 
 
 class ImageJobResult(ApiModel):
@@ -66,6 +90,14 @@ class ImageJobResponse(ApiModel):
     id: str
     status: ImageJobStatus
     progress: int | None = Field(ge=0, le=100)
+    phase: ImageProgressPhase
+    current_step: int | None = Field(default=None, alias="currentStep", ge=0)
+    total_steps: int | None = Field(default=None, alias="totalSteps", ge=1)
+    progress_source: ImageProgressSource = Field(alias="progressSource")
+    stalled: bool
+    estimated_remaining_seconds: int | None = Field(
+        default=None, alias="estimatedRemainingSeconds", ge=0
+    )
     prompt: str
     settings: ImageJobSettings
     created_at: datetime = Field(alias="createdAt")
@@ -85,3 +117,22 @@ class ImageProviderResponse(ApiModel):
     label: str
     ready: bool
     message: str
+
+
+class ImageEditLoraOption(ApiModel):
+    id: str
+    label: str
+
+
+class ImageEditOptionDefaults(ApiModel):
+    steps: int
+    cfg: float
+    sampler: str
+    scheduler: str
+
+
+class ImageEditProviderOptionsResponse(ApiModel):
+    samplers: list[str]
+    schedulers: list[str]
+    loras: list[ImageEditLoraOption]
+    defaults: ImageEditOptionDefaults

@@ -15,6 +15,13 @@
           "aspectRatio": {
             "$ref": "#/components/schemas/AspectRatio"
           },
+          "cfg": {
+            "default": 1.0,
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Cfg",
+            "type": "number"
+          },
           "faceReference": {
             "anyOf": [
               {
@@ -27,10 +34,45 @@
             ],
             "title": "Facereference"
           },
+          "fitMode": {
+            "$ref": "#/components/schemas/EditFitMode",
+            "default": "fit"
+          },
+          "groundingResolution": {
+            "default": 768,
+            "title": "Groundingresolution",
+            "type": "integer"
+          },
+          "loras": {
+            "default": "[]",
+            "title": "Loras",
+            "type": "string"
+          },
           "prompt": {
             "maxLength": 1200,
             "minLength": 1,
             "title": "Prompt",
+            "type": "string"
+          },
+          "referenceInfluence": {
+            "default": 4.0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Referenceinfluence",
+            "type": "number"
+          },
+          "sampler": {
+            "default": "euler",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "default": "simple",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Scheduler",
             "type": "string"
           },
           "seed": {
@@ -47,9 +89,34 @@
             "title": "Seed"
           },
           "source": {
-            "contentMediaType": "application/octet-stream",
-            "title": "Source",
-            "type": "string"
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "sourceJobId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcejobid"
+          },
+          "steps": {
+            "default": 8,
+            "maximum": 12.0,
+            "minimum": 4.0,
+            "title": "Steps",
+            "type": "integer"
           },
           "style": {
             "$ref": "#/components/schemas/ImageStyle"
@@ -58,11 +125,17 @@
         "required": [
           "prompt",
           "aspectRatio",
-          "style",
-          "source"
+          "style"
         ],
         "title": "Body_create_image_edit_job_api_v1_image_edit_jobs_post",
         "type": "object"
+      },
+      "EditFitMode": {
+        "enum": [
+          "fit",
+          "crop"
+        ],
+        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {
@@ -111,6 +184,138 @@
           "timestamp"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "ImageEditLoraOption": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ImageEditLoraOption",
+        "type": "object"
+      },
+      "ImageEditOptionDefaults": {
+        "properties": {
+          "cfg": {
+            "title": "Cfg",
+            "type": "number"
+          },
+          "sampler": {
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "cfg",
+          "sampler",
+          "scheduler"
+        ],
+        "title": "ImageEditOptionDefaults",
+        "type": "object"
+      },
+      "ImageEditProviderOptionsResponse": {
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/ImageEditOptionDefaults"
+          },
+          "loras": {
+            "items": {
+              "$ref": "#/components/schemas/ImageEditLoraOption"
+            },
+            "title": "Loras",
+            "type": "array"
+          },
+          "samplers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Samplers",
+            "type": "array"
+          },
+          "schedulers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schedulers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "samplers",
+          "schedulers",
+          "loras",
+          "defaults"
+        ],
+        "title": "ImageEditProviderOptionsResponse",
+        "type": "object"
+      },
+      "ImageEditSettingsResponse": {
+        "properties": {
+          "cfg": {
+            "title": "Cfg",
+            "type": "number"
+          },
+          "fitMode": {
+            "$ref": "#/components/schemas/EditFitMode"
+          },
+          "groundingResolution": {
+            "title": "Groundingresolution",
+            "type": "integer"
+          },
+          "loras": {
+            "items": {
+              "$ref": "#/components/schemas/LoraSelectionResponse"
+            },
+            "title": "Loras",
+            "type": "array"
+          },
+          "referenceInfluence": {
+            "title": "Referenceinfluence",
+            "type": "number"
+          },
+          "sampler": {
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "cfg",
+          "referenceInfluence",
+          "groundingResolution",
+          "fitMode",
+          "sampler",
+          "scheduler",
+          "loras"
+        ],
+        "title": "ImageEditSettingsResponse",
         "type": "object"
       },
       "ImageJobCreate": {
@@ -219,6 +424,18 @@
             "title": "Createdat",
             "type": "string"
           },
+          "currentStep": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentstep"
+          },
           "error": {
             "anyOf": [
               {
@@ -229,9 +446,24 @@
               }
             ]
           },
+          "estimatedRemainingSeconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimatedremainingseconds"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/ImageProgressPhase"
           },
           "progress": {
             "anyOf": [
@@ -245,6 +477,9 @@
               }
             ],
             "title": "Progress"
+          },
+          "progressSource": {
+            "$ref": "#/components/schemas/ImageProgressSource"
           },
           "prompt": {
             "title": "Prompt",
@@ -263,6 +498,10 @@
           "settings": {
             "$ref": "#/components/schemas/ImageJobSettings"
           },
+          "stalled": {
+            "title": "Stalled",
+            "type": "boolean"
+          },
           "startedAt": {
             "anyOf": [
               {
@@ -277,12 +516,27 @@
           },
           "status": {
             "$ref": "#/components/schemas/ImageJobStatus"
+          },
+          "totalSteps": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totalsteps"
           }
         },
         "required": [
           "id",
           "status",
           "progress",
+          "phase",
+          "progressSource",
+          "stalled",
           "prompt",
           "settings",
           "createdAt",
@@ -326,6 +580,16 @@
           "aspectRatio": {
             "$ref": "#/components/schemas/AspectRatio"
           },
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageEditSettingsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hasFaceReference": {
             "title": "Hasfacereference",
             "type": "boolean"
@@ -339,6 +603,17 @@
           "seed": {
             "title": "Seed",
             "type": "integer"
+          },
+          "sourceJobId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcejobid"
           },
           "style": {
             "$ref": "#/components/schemas/ImageStyle"
@@ -371,6 +646,27 @@
           "image/png",
           "image/jpeg",
           "image/webp"
+        ],
+        "type": "string"
+      },
+      "ImageProgressPhase": {
+        "enum": [
+          "queued",
+          "uploading",
+          "preparing",
+          "sampling",
+          "saving",
+          "completed",
+          "failed",
+          "canceled"
+        ],
+        "type": "string"
+      },
+      "ImageProgressSource": {
+        "enum": [
+          "provider",
+          "inferred",
+          "unknown"
         ],
         "type": "string"
       },
@@ -424,6 +720,29 @@
           "concept"
         ],
         "type": "string"
+      },
+      "LoraSelectionResponse": {
+        "properties": {
+          "clipWeight": {
+            "title": "Clipweight",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "modelWeight": {
+            "title": "Modelweight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "modelWeight",
+          "clipWeight"
+        ],
+        "title": "LoraSelectionResponse",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -769,6 +1088,50 @@
         ]
       }
     },
+    "/api/v1/image-jobs/{job_id}/inputs/{role}": {
+      "get": {
+        "operationId": "get_image_job_input_api_v1_image_jobs__job_id__inputs__role__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "title": "Role",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job Input",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
     "/api/v1/image-jobs/{job_id}/result": {
       "get": {
         "operationId": "get_image_job_result_api_v1_image_jobs__job_id__result_get",
@@ -841,6 +1204,27 @@
           }
         },
         "summary": "Get Image Edit Provider",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/v1/providers/image-edit/options": {
+      "get": {
+        "operationId": "get_image_edit_options_api_v1_providers_image_edit_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageEditProviderOptionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Image Edit Options",
         "tags": [
           "providers"
         ]

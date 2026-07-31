@@ -20,6 +20,23 @@ class ProviderDescriptor:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class LoraOption:
+    id: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImageEditProviderOptions:
+    samplers: tuple[str, ...]
+    schedulers: tuple[str, ...]
+    loras: tuple[LoraOption, ...]
+    default_sampler: str = "euler"
+    default_scheduler: str = "simple"
+    default_steps: int = 8
+    default_cfg: float = 1.0
+
+
 class ImageProviderError(RuntimeError):
     def __init__(self, details: ProviderErrorDetails) -> None:
         super().__init__(details.message)
@@ -32,6 +49,8 @@ class ImageGenerationProvider(Protocol):
     async def describe(self) -> ProviderDescriptor: ...
 
     async def describe_edit(self) -> ProviderDescriptor: ...
+
+    async def describe_edit_options(self) -> ImageEditProviderOptions: ...
 
     async def submit(self, request: ImageGenerationRequest) -> str: ...
 

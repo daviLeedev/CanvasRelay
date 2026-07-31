@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, Pencil, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -83,6 +83,18 @@ export function LibraryWorkspace() {
                       <div><dt>Ratio</dt><dd>{job.settings.aspectRatio}</dd></div>
                       <div><dt>Created</dt><dd>{formatCreatedAt(job.createdAt)}</dd></div>
                     </dl>
+                    {job.settings.edit ? (
+                      <details className={styles.details}>
+                        <summary>Edit settings</summary>
+                        <p>{job.settings.edit.sampler} / {job.settings.edit.scheduler} · {job.settings.edit.steps} steps · CFG {job.settings.edit.cfg}</p>
+                        {job.settings.edit.loras.map((lora) => (
+                          <p key={lora.id}>{lora.id} · Model {lora.modelWeight} · CLIP {lora.clipWeight}</p>
+                        ))}
+                      </details>
+                    ) : null}
+                    <Link className={styles.editLink} href={`/edit?sourceJobId=${encodeURIComponent(job.id)}`}>
+                      <Pencil aria-hidden="true" size={14} />Edit
+                    </Link>
                   </div>
                 </article>
               );

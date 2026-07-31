@@ -71,6 +71,13 @@ class FilesystemUploadStore:
             temporary.unlink(missing_ok=True)
         return filename
 
+    def read(self, relative_path: str, mime_type: ImageMimeType) -> ProviderContent:
+        path = self._resolve(relative_path)
+        try:
+            return ProviderContent(path.read_bytes(), mime_type)
+        except FileNotFoundError as error:
+            raise MediaNotFoundError(relative_path) from error
+
     def _resolve(self, relative_path: str) -> Path:
         path = (self.root / relative_path).resolve()
         if path.parent != self.root:

@@ -1,11 +1,17 @@
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
-from app.domain.image_jobs import ImageGenerationRequest, ProviderContent
+from app.domain.image_jobs import (
+    ImageEditSettings,
+    ImageGenerationRequest,
+    LoraSelection,
+    ProviderContent,
+)
 from app.providers.comfyui import ComfyUIImageProvider
 
 
@@ -305,3 +311,186 @@ async def test_comfyui_normalizes_execution_errors(tmp_path: Path) -> None:
     assert snapshot.error is not None
     assert snapshot.error.code == "provider_execution_failed"
     assert "raw detail" not in snapshot.error.message
+
+
+@pytest.mark.anyio
+async def test_comfyui_applies_supported_controls_and_ordered_lora_chain(
+    tmp_path: Path,
+) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    edit_path = tmp_path / "edit.json"
+    allowlist_path = tmp_path / "allowlist.json"
+    write_workflow(workflow_path)
+    edit_path.write_text(
+        json.dumps(
+            {
+                "1": {"class_type": "LoadImage", "inputs": {"image": "{{source_image}}"}},
+                "2": {"class_type": "BaseModel", "inputs": {}},
+                "3": {"class_type": "BaseClip", "inputs": {}},
+                "4": {
+                    "class_type": "EditModelPatch",
+                    "inputs": {
+                        "model": ["2", 0],
+                        "reference": "{{edit_reference_influence}}",
+                        "fit": "{{edit_fit_mode}}",
+                    },
+                },
+                "5": {
+                    "class_type": "EditTextEncode",
+                    "inputs": {
+                        "clip": ["3", 0],
+                        "grounding": "{{edit_grounding_resolution}}",
+                    },
+                },
+                "6": {
+                    "class_type": "KSampler",
+                    "inputs": {
+                        "model": ["4", 0], "steps": 4, "cfg": 1,
+                        "sampler_name": "euler", "scheduler": "simple",
+                        "prompt": "{{prompt}}", "seed": "{{seed}}",
+                        "width": "{{width}}", "height": "{{height}}",
+                    },
+                },
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "{{filename_prefix}}"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    allowlist_path.write_text(
+        json.dumps(
+            {
+                "loras": [
+                    {"id": "detail", "label": "Detail", "filename": "local/detail.safetensors"},
+                    {"id": "light", "label": "Light", "filename": "local/light.safetensors"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    submitted: dict[str, Any] = {}
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        if http_request.url.path == "/object_info/KSampler":
+            return httpx.Response(200, json={"KSampler": {"input": {"required": {
+                "sampler_name": [["euler", "dpmpp_2m"]],
+                "scheduler": [["simple", "karras"]],
+            }}}})
+        if http_request.url.path == "/upload/image":
+            return httpx.Response(200, json={"name": "source.png", "subfolder": "canvasrelay"})
+        if http_request.url.path == "/prompt":
+            submitted.update(json.loads(http_request.content))
+            return httpx.Response(200, json={"prompt_id": "advanced_edit"})
+        raise AssertionError(f"Unexpected request: {http_request.method} {http_request.url.path}")
+
+    base = request()
+    edit_request = ImageGenerationRequest(
+        job_id=base.job_id,
+        prompt=base.prompt,
+        aspect_ratio=base.aspect_ratio,
+        style=base.style,
+        seed=base.seed,
+        created_at=base.created_at,
+        edit_settings=ImageEditSettings(
+            steps=12,
+            cfg=1.7,
+            reference_influence=5.5,
+            grounding_resolution=1024,
+            fit_mode="crop",
+            sampler="dpmpp_2m",
+            scheduler="karras",
+            loras=(LoraSelection("detail", 0.7, 0.3), LoraSelection("light", 0.4, 0.2)),
+        ),
+    )
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        edit_workflow_path=edit_path,
+        edit_lora_allowlist_path=allowlist_path,
+        transport=httpx.MockTransport(handler),
+    )
+
+    options = await provider.describe_edit_options()
+    await provider.submit_edit(edit_request, ProviderContent(b"source", "image/png"), None)
+    workflow = submitted["prompt"]
+
+    assert options.samplers == ("euler", "dpmpp_2m")
+    assert [item.id for item in options.loras] == ["detail", "light"]
+    assert workflow["6"]["inputs"]["steps"] == 12
+    assert workflow["6"]["inputs"]["sampler_name"] == "dpmpp_2m"
+    assert workflow["4"]["inputs"]["reference"] == 5.5
+    assert workflow["4"]["inputs"]["fit"] == "crop (legacy)"
+    assert workflow["5"]["inputs"]["grounding"] == 1024
+    assert workflow["6"]["inputs"]["model"] == ["cr_lora_002", 0]
+    assert workflow["5"]["inputs"]["clip"] == ["cr_lora_002", 1]
+    assert workflow["cr_lora_001"]["inputs"]["strength_model"] == 0.7
+    assert workflow["cr_lora_002"]["inputs"]["clip"] == ["cr_lora_001", 1]
+
+
+@pytest.mark.anyio
+async def test_comfyui_does_not_interrupt_an_unrelated_running_prompt(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    write_workflow(workflow_path)
+    mutations: list[str] = []
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        if http_request.url.path == "/prompt":
+            return httpx.Response(200, json={"prompt_id": "ours"})
+        if http_request.url.path == "/history/ours":
+            return httpx.Response(200, json={})
+        if http_request.url.path == "/queue" and http_request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"queue_running": [[1, "someone-else", {}, {}, []]], "queue_pending": []},
+            )
+        if http_request.method == "POST":
+            mutations.append(http_request.url.path)
+            return httpx.Response(200, json={})
+        raise AssertionError(f"Unexpected request: {http_request.method} {http_request.url.path}")
+
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        transport=httpx.MockTransport(handler),
+    )
+    provider_id = await provider.submit(request())
+
+    snapshot = await provider.cancel(provider_id)
+
+    assert snapshot.status == "queued"
+    assert mutations == []
+
+
+@pytest.mark.anyio
+async def test_websocket_steps_override_polling_and_report_a_stall(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    write_workflow(workflow_path)
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        if http_request.url.path == "/history/ws_job":
+            return httpx.Response(200, json={})
+        if http_request.url.path == "/queue":
+            return httpx.Response(200, json={"queue_running": [[1, "ws_job", {}, {}, []]]})
+        raise AssertionError(f"Unexpected request: {http_request.method} {http_request.url.path}")
+
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        stalled_after_seconds=15,
+        transport=httpx.MockTransport(handler),
+    )
+    provider.resume("ws_job", request())
+    provider._apply_websocket_event(
+        {"type": "progress", "data": {"prompt_id": "ws_job", "value": 3, "max": 8}}
+    )
+
+    progressing = await provider.poll("ws_job")
+    provider._jobs["ws_job"].last_event_at = datetime.now(UTC) - timedelta(seconds=20)
+    stalled = await provider.poll("ws_job")
+
+    assert progressing.phase == "sampling"
+    assert progressing.current_step == 3 and progressing.total_steps == 8
+    assert progressing.progress == 38
+    assert stalled.stalled is True

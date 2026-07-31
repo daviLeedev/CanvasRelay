@@ -20,9 +20,11 @@ class Settings(BaseSettings):
     comfyui_workflow_path: Path | None = None
     comfyui_edit_workflow_path: Path | None = None
     comfyui_edit_face_workflow_path: Path | None = None
+    comfyui_edit_lora_allowlist_path: Path | None = None
     comfyui_output_node_id: str | None = None
     comfyui_timeout_seconds: float = 30
     comfyui_max_result_bytes: int = 50 * 1024 * 1024
+    comfyui_stalled_after_seconds: float = 90
     max_upload_bytes: int = 20 * 1024 * 1024
     data_dir: Path = Path(".canvasrelay")
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -61,6 +63,10 @@ class Settings(BaseSettings):
     @property
     def resolved_comfyui_edit_face_workflow_path(self) -> Path | None:
         return self._resolve_repository_path(self.comfyui_edit_face_workflow_path)
+
+    @property
+    def resolved_comfyui_edit_lora_allowlist_path(self) -> Path | None:
+        return self._resolve_repository_path(self.comfyui_edit_lora_allowlist_path)
 
     @property
     def resolved_data_dir(self) -> Path:

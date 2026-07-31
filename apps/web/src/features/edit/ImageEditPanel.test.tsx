@@ -6,6 +6,14 @@ import { ImageEditPanel } from "./ImageEditPanel";
 
 const baseProps = {
   job: null,
+  sourceJob: null,
+  sourceJobPreview: null,
+  options: {
+    samplers: ["euler", "dpmpp_2m"],
+    schedulers: ["simple", "karras"],
+    loras: [{ id: "demo-detail", label: "Detail enhancer" }],
+    defaults: { steps: 8, cfg: 1, sampler: "euler", scheduler: "simple" },
+  },
   isBusy: false,
   isSubmitting: false,
   isCanceling: false,
@@ -19,6 +27,7 @@ const baseProps = {
     message: "Connected to the configured local image edit workflow.",
   } as const,
   providerStatusUnavailable: false,
+  onSourceJobChange: vi.fn(),
   onSourcePreview: vi.fn(),
   onSubmit: vi.fn(async () => undefined),
   onCancel: vi.fn(async () => undefined),
@@ -80,5 +89,29 @@ describe("ImageEditPanel", () => {
         expect.not.objectContaining({ faceReference: expect.anything() }),
       ),
     );
+  });
+
+  it("submits advanced controls and ordered LoRA weights", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+    render(<ImageEditPanel {...baseProps} onSubmit={onSubmit} />);
+    await user.upload(
+      screen.getByLabelText(/Source image/iu),
+      new File(["source"], "source.png", { type: "image/png" }),
+    );
+    await user.type(screen.getByLabelText("Edit prompt"), "Refine the lighting");
+    await user.click(screen.getByText("Advanced settings"));
+    await user.selectOptions(screen.getByLabelText("Sampler"), "dpmpp_2m");
+    await user.selectOptions(screen.getByLabelText("Scheduler"), "karras");
+    await user.selectOptions(screen.getByLabelText("Add LoRA"), "demo-detail");
+    await user.clear(screen.getByLabelText("demo-detail model weight"));
+    await user.type(screen.getByLabelText("demo-detail model weight"), "0.7");
+    await user.click(screen.getByRole("button", { name: "Generate edit" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      sampler: "dpmpp_2m",
+      scheduler: "karras",
+      loras: [{ id: "demo-detail", modelWeight: 0.7, clipWeight: 1 }],
+    })));
   });
 });

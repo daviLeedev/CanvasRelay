@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any, cast
+from urllib.parse import urlencode, urlsplit, urlunsplit
+from uuid import uuid4
 
 import httpx
+from websockets.asyncio.client import connect
 
 from app.domain.image_jobs import (
     ImageGenerationRequest,
     ImageJobStatus,
     ImageMimeType,
+    ImageProgressPhase,
     ImageProviderName,
     ProviderContent,
     ProviderErrorDetails,
@@ -22,7 +28,12 @@ from app.domain.image_jobs import (
     ProviderSnapshot,
     image_dimensions,
 )
-from app.providers.base import ImageProviderError, ProviderDescriptor
+from app.providers.base import (
+    ImageEditProviderOptions,
+    ImageProviderError,
+    LoraOption,
+    ProviderDescriptor,
+)
 
 PLACEHOLDERS = {
     "{{prompt}}",
@@ -32,14 +43,24 @@ PLACEHOLDERS = {
     "{{filename_prefix}}",
 }
 EDIT_PLACEHOLDERS = PLACEHOLDERS | {"{{source_image}}"}
-
-
 @dataclass(slots=True)
 class _TrackedComfyJob:
     request: ImageGenerationRequest
     submitted_at: datetime
     last_status: ImageJobStatus = "queued"
     missing_polls: int = 0
+    phase: ImageProgressPhase = "queued"
+    current_step: int | None = None
+    total_steps: int | None = None
+    last_event_at: datetime | None = None
+    websocket_available: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _LoraAllowlistEntry:
+    id: str
+    label: str
+    filename: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,22 +81,27 @@ class ComfyUIImageProvider:
         workflow_path: Path | None,
         edit_workflow_path: Path | None = None,
         edit_face_workflow_path: Path | None = None,
+        edit_lora_allowlist_path: Path | None = None,
         output_node_id: str | None = None,
         timeout_seconds: float = 30,
         max_result_bytes: int = 50 * 1024 * 1024,
+        stalled_after_seconds: float = 90,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._workflow_path = workflow_path
         self._edit_workflow_path = edit_workflow_path
         self._edit_face_workflow_path = edit_face_workflow_path
+        self._edit_lora_allowlist_path = edit_lora_allowlist_path
         self._output_node_id = output_node_id.strip() if output_node_id else None
         self._timeout = httpx.Timeout(timeout_seconds, connect=min(5, timeout_seconds))
         self._max_result_bytes = max_result_bytes
+        self._stalled_after_seconds = max(15, stalled_after_seconds)
         self._transport = transport
         self._jobs: dict[str, _TrackedComfyJob] = {}
         self._outputs: dict[str, _OutputLocation] = {}
         self._lock = RLock()
+        self._listener_tasks: set[asyncio.Task[None]] = set()
 
     async def describe(self) -> ProviderDescriptor:
         try:
@@ -119,6 +145,28 @@ class ComfyUIImageProvider:
             "Connected to the configured local image edit workflow.",
         )
 
+    async def describe_edit_options(self) -> ImageEditProviderOptions:
+        samplers: tuple[str, ...] = ("euler",)
+        schedulers: tuple[str, ...] = ("simple",)
+        try:
+            response = await self._request("GET", "/object_info/KSampler")
+            payload = response.json()
+            node = payload.get("KSampler") if isinstance(payload, Mapping) else None
+            inputs = node.get("input") if isinstance(node, Mapping) else None
+            required = inputs.get("required") if isinstance(inputs, Mapping) else None
+            samplers = self._option_values(required, "sampler_name") or samplers
+            schedulers = self._option_values(required, "scheduler") or schedulers
+        except (ImageProviderError, ValueError, json.JSONDecodeError):
+            pass
+        loras = tuple(LoraOption(item.id, item.label) for item in self._load_lora_allowlist())
+        return ImageEditProviderOptions(
+            samplers=samplers,
+            schedulers=schedulers,
+            loras=loras,
+            default_sampler="euler" if "euler" in samplers else samplers[0],
+            default_scheduler="simple" if "simple" in schedulers else schedulers[0],
+        )
+
     async def submit(self, request: ImageGenerationRequest) -> str:
         workflow = self._bind_workflow(self._load_workflow(), request)
         return await self._submit_workflow(request, workflow)
@@ -159,11 +207,19 @@ class ComfyUIImageProvider:
         request: ImageGenerationRequest,
         workflow: dict[str, Any],
     ) -> str:
+        client_id = f"canvasrelay-{uuid4().hex}"
+        if self._transport is None:
+            ready = asyncio.Event()
+            listener = asyncio.create_task(self._listen_for_progress(client_id, ready))
+            self._listener_tasks.add(listener)
+            listener.add_done_callback(self._listener_tasks.discard)
+            with suppress(TimeoutError):
+                await asyncio.wait_for(ready.wait(), timeout=1.5)
         try:
             response = await self._request(
                 "POST",
                 "/prompt",
-                json={"prompt": workflow, "client_id": "canvasrelay"},
+                json={"prompt": workflow, "client_id": client_id},
             )
             payload = response.json()
             provider_job_id = payload.get("prompt_id") if isinstance(payload, Mapping) else None
@@ -174,7 +230,11 @@ class ComfyUIImageProvider:
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
             raise self._unavailable_error() from error
         with self._lock:
-            self._jobs[provider_job_id] = _TrackedComfyJob(request, datetime.now(UTC))
+            self._jobs[provider_job_id] = _TrackedComfyJob(
+                request,
+                datetime.now(UTC),
+                last_event_at=datetime.now(UTC),
+            )
         return provider_job_id
 
     async def _upload_image(
@@ -240,13 +300,16 @@ class ComfyUIImageProvider:
             if self._queue_contains(queue.get("queue_pending"), provider_job_id):
                 return self._remember_snapshot(
                     provider_job_id,
-                    ProviderSnapshot("queued", 0),
+                    ProviderSnapshot(
+                        "queued",
+                        0,
+                        phase="queued",
+                        progress_source="inferred",
+                        progress_updated_at=datetime.now(UTC),
+                    ),
                 )
             if self._queue_contains(queue.get("queue_running"), provider_job_id):
-                return self._remember_snapshot(
-                    provider_job_id,
-                    ProviderSnapshot("running", None),
-                )
+                return self._running_snapshot(provider_job_id)
 
         grace_snapshot = self._snapshot_during_history_transition(provider_job_id)
         if grace_snapshot is not None:
@@ -255,6 +318,7 @@ class ComfyUIImageProvider:
         return ProviderSnapshot(
             "failed",
             None,
+            phase="failed",
             error=ProviderErrorDetails(
                 "provider_job_missing",
                 "ComfyUI no longer reports this generation job.",
@@ -271,9 +335,122 @@ class ComfyUIImageProvider:
         with self._lock:
             tracked = self._jobs.get(provider_job_id)
             if tracked is not None:
+                changed = (
+                    tracked.phase != snapshot.phase
+                    or tracked.current_step != snapshot.current_step
+                    or tracked.total_steps != snapshot.total_steps
+                )
                 tracked.last_status = snapshot.status
+                tracked.phase = snapshot.phase
+                tracked.current_step = snapshot.current_step
+                tracked.total_steps = snapshot.total_steps
+                if changed and snapshot.progress_updated_at is not None:
+                    tracked.last_event_at = snapshot.progress_updated_at
                 tracked.missing_polls = 0
         return snapshot
+
+    def _running_snapshot(self, provider_job_id: str) -> ProviderSnapshot:
+        tracked = self._get_tracked(provider_job_id)
+        phase: ImageProgressPhase = (
+            tracked.phase if tracked.phase in {"preparing", "sampling", "saving"} else "preparing"
+        )
+        progress = self._step_progress(tracked.current_step, tracked.total_steps)
+        return self._remember_snapshot(
+            provider_job_id,
+            ProviderSnapshot(
+                "running",
+                progress,
+                phase=phase,
+                current_step=tracked.current_step,
+                total_steps=tracked.total_steps,
+                progress_source="provider" if tracked.current_step is not None else "inferred",
+                progress_updated_at=tracked.last_event_at,
+                stalled=self._is_stalled("running", phase, tracked.last_event_at),
+            ),
+        )
+
+    async def _listen_for_progress(self, client_id: str, ready: asyncio.Event) -> None:
+        try:
+            async with connect(
+                self._websocket_url(client_id),
+                max_size=1024 * 1024,
+                ping_interval=20,
+                open_timeout=min(5, self._timeout.connect or 5),
+            ) as websocket:
+                ready.set()
+                async for message in websocket:
+                    if isinstance(message, bytes):
+                        continue
+                    try:
+                        payload = json.loads(message)
+                    except (TypeError, json.JSONDecodeError):
+                        continue
+                    if self._apply_websocket_event(payload):
+                        break
+        except (OSError, TimeoutError, ValueError):
+            ready.set()
+        finally:
+            ready.set()
+
+    def _apply_websocket_event(self, payload: Any) -> bool:
+        if not isinstance(payload, Mapping):
+            return False
+        event_type = payload.get("type")
+        data = payload.get("data")
+        if not isinstance(event_type, str) or not isinstance(data, Mapping):
+            return False
+        prompt_id = data.get("prompt_id")
+        if not isinstance(prompt_id, str):
+            return False
+        now = datetime.now(UTC)
+        with self._lock:
+            tracked = self._jobs.get(prompt_id)
+            if tracked is None:
+                return False
+            tracked.websocket_available = True
+            tracked.last_event_at = now
+            if event_type in {"execution_start", "executing"}:
+                tracked.last_status = "running"
+                if tracked.current_step is None:
+                    tracked.phase = "preparing"
+            elif event_type == "progress":
+                current = data.get("value")
+                total = data.get("max")
+                if isinstance(current, int) and isinstance(total, int) and total > 0:
+                    tracked.last_status = "running"
+                    tracked.phase = "sampling"
+                    tracked.current_step = max(0, min(current, total))
+                    tracked.total_steps = total
+            elif event_type == "execution_success":
+                tracked.last_status = "running"
+                tracked.phase = "saving"
+                return True
+            elif event_type in {"execution_error", "execution_interrupted"}:
+                return True
+        return False
+
+    def _websocket_url(self, client_id: str) -> str:
+        parts = urlsplit(self._base_url)
+        scheme = "wss" if parts.scheme == "https" else "ws"
+        return urlunsplit((scheme, parts.netloc, "/ws", urlencode({"clientId": client_id}), ""))
+
+    @staticmethod
+    def _step_progress(current_step: int | None, total_steps: int | None) -> int | None:
+        if current_step is None or total_steps is None or total_steps <= 0:
+            return None
+        return max(0, min(99, round(current_step / total_steps * 100)))
+
+    def _is_stalled(
+        self,
+        status: ImageJobStatus,
+        phase: ImageProgressPhase,
+        last_event_at: datetime | None,
+    ) -> bool:
+        if status != "running" or phase not in {"preparing", "sampling"}:
+            return False
+        if last_event_at is None:
+            return False
+        return (datetime.now(UTC) - last_event_at).total_seconds() >= self._stalled_after_seconds
 
     def _snapshot_during_history_transition(
         self,
@@ -291,22 +468,41 @@ class ComfyUIImageProvider:
                 if tracked.last_status in {"queued", "running"}
                 else "running"
             )
-        return ProviderSnapshot(status, 0 if status == "queued" else None)
+            phase = tracked.phase if status == "running" else "queued"
+            current_step = tracked.current_step
+            total_steps = tracked.total_steps
+            last_event_at = tracked.last_event_at
+        return ProviderSnapshot(
+            status,
+            0 if status == "queued" else self._step_progress(current_step, total_steps),
+            phase=phase,
+            current_step=current_step,
+            total_steps=total_steps,
+            progress_source="provider" if current_step is not None else "inferred",
+            progress_updated_at=last_event_at,
+            stalled=self._is_stalled(status, phase, last_event_at),
+        )
 
     async def cancel(self, provider_job_id: str) -> ProviderSnapshot:
         self._get_tracked(provider_job_id)
         try:
             queue_response = await self._request("GET", "/queue")
             queue = queue_response.json()
-            if isinstance(queue, Mapping) and self._queue_contains(
+            is_running = isinstance(queue, Mapping) and self._queue_contains(
                 queue.get("queue_running"), provider_job_id
-            ):
+            )
+            is_pending = isinstance(queue, Mapping) and self._queue_contains(
+                queue.get("queue_pending"), provider_job_id
+            )
+            if is_running:
                 await self._request("POST", "/interrupt", json={})
-            else:
+            elif is_pending:
                 await self._request("POST", "/queue", json={"delete": [provider_job_id]})
+            else:
+                return await self.poll(provider_job_id)
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
             raise self._unavailable_error() from error
-        return ProviderSnapshot("canceled", 0)
+        return ProviderSnapshot("canceled", 0, phase="canceled", progress_source="inferred")
 
     async def collect(self, provider_job_id: str) -> ProviderContent:
         self._get_tracked(provider_job_id)
@@ -475,7 +671,7 @@ class ComfyUIImageProvider:
         face_image: str | None,
     ) -> dict[str, Any]:
         width, height = image_dimensions(request.aspect_ratio)
-        replacements: dict[str, str | int] = {
+        replacements: dict[str, str | int | float] = {
             "{{prompt}}": request.prompt,
             "{{seed}}": request.seed,
             "{{width}}": width,
@@ -483,6 +679,16 @@ class ComfyUIImageProvider:
             "{{filename_prefix}}": f"canvasrelay/{request.job_id}",
             "{{source_image}}": source_image,
         }
+        if request.edit_settings is not None:
+            replacements.update(
+                {
+                    "{{edit_reference_influence}}": request.edit_settings.reference_influence,
+                    "{{edit_grounding_resolution}}": request.edit_settings.grounding_resolution,
+                    "{{edit_fit_mode}}": (
+                        "fit" if request.edit_settings.fit_mode == "fit" else "crop (legacy)"
+                    ),
+                }
+            )
         if face_image is not None:
             replacements["{{face_image}}"] = face_image
         seen: set[str] = set()
@@ -510,7 +716,104 @@ class ComfyUIImageProvider:
                     False,
                 )
             )
-        return cast(dict[str, Any], bound)
+        typed_bound = cast(dict[str, Any], bound)
+        self._apply_edit_controls(typed_bound, request)
+        self._apply_lora_chain(typed_bound, request)
+        return typed_bound
+
+    def _apply_edit_controls(
+        self,
+        workflow: dict[str, Any],
+        request: ImageGenerationRequest,
+    ) -> None:
+        settings = request.edit_settings
+        if settings is None:
+            return
+        for node in workflow.values():
+            if not isinstance(node, dict):
+                continue
+            class_type = node.get("class_type")
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            if class_type == "KSampler":
+                inputs.update(
+                    {
+                        "steps": settings.steps,
+                        "cfg": settings.cfg,
+                        "sampler_name": settings.sampler,
+                        "scheduler": settings.scheduler,
+                    }
+                )
+
+    def _apply_lora_chain(
+        self,
+        workflow: dict[str, Any],
+        request: ImageGenerationRequest,
+    ) -> None:
+        settings = request.edit_settings
+        if settings is None or not settings.loras:
+            return
+        allowlist = {item.id: item for item in self._load_lora_allowlist()}
+        selected = []
+        for selection in settings.loras:
+            entry = allowlist.get(selection.id)
+            if entry is None:
+                raise self._unsupported_options_error()
+            selected.append((entry, selection))
+
+        sampler_inputs = [
+            inputs
+            for node in workflow.values()
+            if isinstance(node, dict)
+            and node.get("class_type") == "KSampler"
+            and isinstance((inputs := node.get("inputs")), dict)
+            and self._is_node_link(inputs.get("model"))
+        ]
+        clip_inputs = [
+            inputs
+            for node in workflow.values()
+            if isinstance(node, dict)
+            and node.get("class_type") not in {"LoraLoader", "LoraLoaderModelOnly"}
+            and isinstance((inputs := node.get("inputs")), dict)
+            and self._is_node_link(inputs.get("clip"))
+        ]
+        model_links = {tuple(cast(list[Any], inputs["model"])) for inputs in sampler_inputs}
+        clip_links = {tuple(cast(list[Any], inputs["clip"])) for inputs in clip_inputs}
+        if len(model_links) != 1 or len(clip_links) != 1:
+            raise self._unsupported_options_error()
+        model_link: list[Any] = list(next(iter(model_links)))
+        clip_link: list[Any] = list(next(iter(clip_links)))
+
+        existing_names = {
+            inputs.get("lora_name")
+            for node in workflow.values()
+            if isinstance(node, dict)
+            and isinstance((inputs := node.get("inputs")), dict)
+            and node.get("class_type") in {"LoraLoader", "LoraLoaderModelOnly"}
+        }
+        for index, (entry, selection) in enumerate(selected, start=1):
+            if entry.filename in existing_names:
+                continue
+            node_id = self._available_node_id(workflow, f"cr_lora_{index:03d}")
+            workflow[node_id] = {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "model": model_link,
+                    "clip": clip_link,
+                    "lora_name": entry.filename,
+                    "strength_model": selection.model_weight,
+                    "strength_clip": selection.clip_weight,
+                },
+                "_meta": {"title": "CanvasRelay allowed LoRA"},
+            }
+            model_link = [node_id, 0]
+            clip_link = [node_id, 1]
+
+        for inputs in sampler_inputs:
+            inputs["model"] = model_link
+        for inputs in clip_inputs:
+            inputs["clip"] = clip_link
 
     def _snapshot_from_history(
         self,
@@ -524,6 +827,7 @@ class ComfyUIImageProvider:
             return ProviderSnapshot(
                 "failed",
                 None,
+                phase="failed",
                 error=ProviderErrorDetails(
                     "provider_execution_failed",
                     "ComfyUI could not execute the configured workflow.",
@@ -536,11 +840,24 @@ class ComfyUIImageProvider:
             return None
         output = self._select_output(entry.get("outputs"))
         if output is None:
-            return ProviderSnapshot("failed", None, error=self._output_error().details)
+            return ProviderSnapshot(
+                "failed", None, error=self._output_error().details, phase="failed"
+            )
         with self._lock:
             self._outputs[provider_job_id] = output
         width, height = image_dimensions(request.aspect_ratio)
-        return ProviderSnapshot("completed", 100, ProviderResult(output.mime_type, width, height))
+        settings = request.edit_settings
+        total_steps = settings.steps if settings is not None else None
+        return ProviderSnapshot(
+            "completed",
+            100,
+            ProviderResult(output.mime_type, width, height),
+            phase="completed",
+            current_step=total_steps,
+            total_steps=total_steps,
+            progress_source="provider",
+            progress_updated_at=datetime.now(UTC),
+        )
 
     def _select_output(self, outputs: Any) -> _OutputLocation | None:
         if not isinstance(outputs, Mapping):
@@ -593,6 +910,83 @@ class ComfyUIImageProvider:
         return any(
             isinstance(item, list) and len(item) > 1 and item[1] == provider_job_id
             for item in queue
+        )
+
+    @staticmethod
+    def _option_values(required: Any, name: str) -> tuple[str, ...]:
+        if not isinstance(required, Mapping):
+            return ()
+        definition = required.get(name)
+        if not isinstance(definition, list) or not definition:
+            return ()
+        values = definition[0]
+        if not isinstance(values, list):
+            return ()
+        return tuple(value for value in values if isinstance(value, str) and value)
+
+    def _load_lora_allowlist(self) -> tuple[_LoraAllowlistEntry, ...]:
+        path = self._edit_lora_allowlist_path
+        if path is None or not path.is_file():
+            return ()
+        try:
+            if path.stat().st_size > 128 * 1024:
+                return ()
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return ()
+        items = payload.get("loras") if isinstance(payload, Mapping) else None
+        if not isinstance(items, list):
+            return ()
+        entries: list[_LoraAllowlistEntry] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            identifier = item.get("id")
+            label = item.get("label")
+            filename = item.get("filename")
+            if (
+                not isinstance(identifier, str)
+                or not identifier.replace("-", "").replace("_", "").isalnum()
+                or identifier in seen
+                or not isinstance(label, str)
+                or not label.strip()
+                or not isinstance(filename, str)
+                or not filename.strip()
+                or Path(filename).is_absolute()
+            ):
+                continue
+            seen.add(identifier)
+            entries.append(_LoraAllowlistEntry(identifier, label.strip(), filename.strip()))
+        return tuple(entries)
+
+    @staticmethod
+    def _is_node_link(value: Any) -> bool:
+        return (
+            isinstance(value, list)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], int)
+        )
+
+    @staticmethod
+    def _available_node_id(workflow: Mapping[str, Any], preferred: str) -> str:
+        if preferred not in workflow:
+            return preferred
+        index = 2
+        while f"{preferred}_{index}" in workflow:
+            index += 1
+        return f"{preferred}_{index}"
+
+    @staticmethod
+    def _unsupported_options_error() -> ImageProviderError:
+        return ImageProviderError(
+            ProviderErrorDetails(
+                "edit_options_invalid",
+                "The selected edit controls are not supported by this local workflow.",
+                "Refresh the edit options and choose available settings.",
+                False,
+            )
         )
 
     def _get_tracked(self, provider_job_id: str) -> _TrackedComfyJob:

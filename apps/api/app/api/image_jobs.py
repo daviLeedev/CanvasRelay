@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
+    ImageEditSettingsResponse,
     ImageJobCreate,
     ImageJobError,
     ImageJobListResponse,
     ImageJobResponse,
     ImageJobResult,
     ImageJobSettings,
+    LoraSelectionResponse,
 )
 from app.domain.image_jobs import ImageJobOperation, ImageJobRecord, ImageJobStatus
 from app.providers.base import ImageProviderError
@@ -42,10 +44,35 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             action=record.error.action,
             retryable=record.error.retryable,
         )
+    edit = None
+    if record.edit_settings is not None:
+        edit = ImageEditSettingsResponse(
+            steps=record.edit_settings.steps,
+            cfg=record.edit_settings.cfg,
+            referenceInfluence=record.edit_settings.reference_influence,
+            groundingResolution=record.edit_settings.grounding_resolution,
+            fitMode=record.edit_settings.fit_mode,
+            sampler=record.edit_settings.sampler,
+            scheduler=record.edit_settings.scheduler,
+            loras=[
+                LoraSelectionResponse(
+                    id=item.id,
+                    modelWeight=item.model_weight,
+                    clipWeight=item.clip_weight,
+                )
+                for item in record.edit_settings.loras
+            ],
+        )
     return ImageJobResponse(
         id=record.id,
         status=record.status,
         progress=record.progress,
+        phase=record.phase,
+        currentStep=record.current_step,
+        totalSteps=record.total_steps,
+        progressSource=record.progress_source,
+        stalled=record.stalled,
+        estimatedRemainingSeconds=record.estimated_remaining_seconds,
         prompt=record.prompt,
         settings=ImageJobSettings(
             aspectRatio=record.aspect_ratio,
@@ -54,6 +81,8 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             provider=record.provider,
             operation=record.operation,
             hasFaceReference=record.face_reference_path is not None,
+            sourceJobId=record.source_job_id,
+            edit=edit,
         ),
         createdAt=record.created_at,
         startedAt=record.started_at,
@@ -142,6 +171,25 @@ async def get_image_job_result(
 ) -> Response:
     try:
         content = await service.collect(job_id)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
+    return Response(
+        content=content.body,
+        media_type=content.mime_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/{job_id}/inputs/{role}", response_class=Response)
+async def get_image_job_input(
+    job_id: str,
+    role: str,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> Response:
+    try:
+        content = await service.collect_input(job_id, role)
     except ImageJobNotFoundError as error:
         raise _not_found(error) from error
     except ImageProviderError as error:

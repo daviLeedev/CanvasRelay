@@ -21,9 +21,11 @@ def build_image_provider(settings: Settings) -> ImageGenerationProvider:
             workflow_path=settings.resolved_comfyui_workflow_path,
             edit_workflow_path=settings.resolved_comfyui_edit_workflow_path,
             edit_face_workflow_path=settings.resolved_comfyui_edit_face_workflow_path,
+            edit_lora_allowlist_path=settings.resolved_comfyui_edit_lora_allowlist_path,
             output_node_id=settings.comfyui_output_node_id,
             timeout_seconds=settings.comfyui_timeout_seconds,
             max_result_bytes=settings.comfyui_max_result_bytes,
+            stalled_after_seconds=settings.comfyui_stalled_after_seconds,
         )
     return DemoImageProvider()
 

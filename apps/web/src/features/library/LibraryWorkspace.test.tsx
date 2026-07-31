@@ -10,6 +10,12 @@ const completedJob = {
   id: "img_stored",
   status: "completed",
   progress: 100,
+  phase: "completed",
+  currentStep: 8,
+  totalSteps: 8,
+  progressSource: "provider",
+  stalled: false,
+  estimatedRemainingSeconds: null,
   prompt: "A precise persistent studio image",
   settings: {
     aspectRatio: "4:3",
@@ -18,6 +24,8 @@ const completedJob = {
     provider: "demo",
     operation: "generate",
     hasFaceReference: false,
+    sourceJobId: null,
+    edit: null,
   },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: "2026-08-01T00:00:01Z",
@@ -58,6 +66,10 @@ describe("LibraryWorkspace", () => {
     expect(screen.getByRole("img", { name: `Generated result for ${completedJob.prompt}` })).toHaveAttribute(
       "src",
       "http://localhost:8000/api/v1/image-jobs/img_stored/result",
+    );
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/edit?sourceJobId=img_stored",
     );
   });
 
