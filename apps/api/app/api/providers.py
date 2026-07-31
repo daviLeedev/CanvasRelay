@@ -21,3 +21,17 @@ async def get_image_provider(
         ready=descriptor.ready,
         message=descriptor.message,
     )
+
+
+@router.get("/image-edit", response_model=ImageProviderResponse)
+async def get_image_edit_provider(
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> ImageProviderResponse:
+    descriptor = await service.describe_edit_provider()
+    return ImageProviderResponse(
+        provider=descriptor.provider,
+        mode="demo" if descriptor.provider == "demo" else "live",
+        label=descriptor.label,
+        ready=descriptor.ready,
+        message=descriptor.message,
+    )

@@ -1,13 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createImageJob, fetchImageJob, fetchImageJobs, subscribeImageJob } from "./imageJobs";
+import { createImageEditJob, createImageJob, fetchImageJob, fetchImageJobs, subscribeImageJob } from "./imageJobs";
 
 const queuedJob = {
   id: "img_demo",
   status: "queued",
   progress: 0,
   prompt: "A structured studio still",
-  settings: { aspectRatio: "4:3", style: "editorial", seed: 42, provider: "demo" },
+  settings: {
+    aspectRatio: "4:3",
+    style: "editorial",
+    seed: 42,
+    provider: "demo",
+    operation: "generate",
+    hasFaceReference: false,
+  },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: null,
   completedAt: null,
@@ -48,6 +55,36 @@ describe("image job API client", () => {
     await expect(fetchImageJob("img_demo")).rejects.toThrow("invalid response");
   });
 
+  it("submits source and optional face files as multipart form data", async () => {
+    const editedJob = {
+      ...queuedJob,
+      settings: { ...queuedJob.settings, operation: "edit", hasFaceReference: true },
+    } as const;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(editedJob), { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const source = new File(["source"], "source.png", { type: "image/png" });
+    const faceReference = new File(["face"], "face.png", { type: "image/png" });
+
+    await createImageEditJob({
+      prompt: "Change the lighting",
+      aspectRatio: "4:3",
+      style: "editorial",
+      seed: 7,
+      source,
+      faceReference,
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+    const body = init.body as FormData;
+    expect(body.get("source")).toBe(source);
+    expect(body.get("faceReference")).toBe(faceReference);
+    expect(body.get("prompt")).toBe("Change the lighting");
+  });
+
   it("does not surface raw server errors", async () => {
     vi.stubGlobal(
       "fetch",
@@ -73,8 +110,8 @@ describe("image job API client", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchImageJobs(6, "completed")).resolves.toEqual([queuedJob]);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("limit=6&status=completed");
+    await expect(fetchImageJobs(6, "completed", "generate")).resolves.toEqual([queuedJob]);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("limit=6&status=completed&operation=generate");
   });
 
   it("streams typed job updates and closes the subscription", () => {

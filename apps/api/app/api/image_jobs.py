@@ -13,7 +13,7 @@ from app.api.schemas import (
     ImageJobResult,
     ImageJobSettings,
 )
-from app.domain.image_jobs import ImageJobRecord, ImageJobStatus
+from app.domain.image_jobs import ImageJobOperation, ImageJobRecord, ImageJobStatus
 from app.providers.base import ImageProviderError
 from app.repositories.image_jobs import TERMINAL_STATUSES, ImageJobNotFoundError
 from app.services.image_jobs import ImageJobService
@@ -52,6 +52,8 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             style=record.style,
             seed=record.seed,
             provider=record.provider,
+            operation=record.operation,
+            hasFaceReference=record.face_reference_path is not None,
         ),
         createdAt=record.created_at,
         startedAt=record.started_at,
@@ -101,8 +103,9 @@ async def list_image_jobs(
     service: Annotated[ImageJobService, Depends(get_image_job_service)],
     limit: Annotated[int, Query(ge=1, le=100)] = 24,
     job_status: Annotated[ImageJobStatus | None, Query(alias="status")] = None,
+    operation: Annotated[ImageJobOperation | None, Query()] = None,
 ) -> ImageJobListResponse:
-    records = await service.list_recent(limit=limit, status=job_status)
+    records = await service.list_recent(limit=limit, status=job_status, operation=operation)
     return ImageJobListResponse(items=[_to_response(record) for record in records])
 
 

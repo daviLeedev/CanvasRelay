@@ -18,9 +18,12 @@ class Settings(BaseSettings):
     image_provider: Literal["demo", "comfyui"] | None = None
     comfyui_base_url: str = "http://127.0.0.1:8188"
     comfyui_workflow_path: Path | None = None
+    comfyui_edit_workflow_path: Path | None = None
+    comfyui_edit_face_workflow_path: Path | None = None
     comfyui_output_node_id: str | None = None
     comfyui_timeout_seconds: float = 30
     comfyui_max_result_bytes: int = 50 * 1024 * 1024
+    max_upload_bytes: int = 20 * 1024 * 1024
     data_dir: Path = Path(".canvasrelay")
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     app_version: str = "0.1.0"
@@ -45,6 +48,20 @@ class Settings(BaseSettings):
         repository_root = Path(__file__).resolve().parents[4]
         return repository_root / path
 
+    def _resolve_repository_path(self, path: Path | None) -> Path | None:
+        if path is None or path.is_absolute():
+            return path
+        repository_root = Path(__file__).resolve().parents[4]
+        return repository_root / path
+
+    @property
+    def resolved_comfyui_edit_workflow_path(self) -> Path | None:
+        return self._resolve_repository_path(self.comfyui_edit_workflow_path)
+
+    @property
+    def resolved_comfyui_edit_face_workflow_path(self) -> Path | None:
+        return self._resolve_repository_path(self.comfyui_edit_face_workflow_path)
+
     @property
     def resolved_data_dir(self) -> Path:
         if self.data_dir.is_absolute():
@@ -59,6 +76,10 @@ class Settings(BaseSettings):
     @property
     def media_root(self) -> Path:
         return self.resolved_data_dir / "media" / "images"
+
+    @property
+    def upload_root(self) -> Path:
+        return self.resolved_data_dir / "media" / "uploads"
 
 
 @lru_cache

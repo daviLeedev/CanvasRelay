@@ -5,6 +5,11 @@ import { getApiBaseUrl } from "@/lib/env";
 export type ImageJobCreate = components["schemas"]["ImageJobCreate"];
 export type ImageJobResponse = components["schemas"]["ImageJobResponse"];
 export type ImageJobListResponse = components["schemas"]["ImageJobListResponse"];
+export type ImageEditJobCreate = Omit<ImageJobCreate, "prompt"> & {
+  prompt: string;
+  source: File;
+  faceReference?: File;
+};
 
 const jobStatuses = new Set<ImageJobResponse["status"]>([
   "queued",
@@ -16,6 +21,7 @@ const jobStatuses = new Set<ImageJobResponse["status"]>([
 const aspectRatios = new Set<ImageJobResponse["settings"]["aspectRatio"]>(["1:1", "4:3", "3:4", "16:9"]);
 const imageStyles = new Set<ImageJobResponse["settings"]["style"]>(["editorial", "product", "concept"]);
 const imageProviders = new Set<ImageJobResponse["settings"]["provider"]>(["demo", "comfyui"]);
+const imageOperations = new Set<ImageJobResponse["settings"]["operation"]>(["generate", "edit"]);
 const imageMimeTypes = new Set<NonNullable<ImageJobResponse["result"]>["mimeType"]>([
   "image/svg+xml",
   "image/png",
@@ -50,7 +56,10 @@ export function parseImageJob(value: unknown): ImageJobResponse {
     imageStyles.has(value.settings.style as ImageJobResponse["settings"]["style"]) &&
     typeof value.settings.seed === "number" &&
     typeof value.settings.provider === "string" &&
-    imageProviders.has(value.settings.provider as ImageJobResponse["settings"]["provider"]);
+    imageProviders.has(value.settings.provider as ImageJobResponse["settings"]["provider"]) &&
+    typeof value.settings.operation === "string" &&
+    imageOperations.has(value.settings.operation as ImageJobResponse["settings"]["operation"]) &&
+    typeof value.settings.hasFaceReference === "boolean";
   const progressIsValid =
     value.progress === null ||
     (typeof value.progress === "number" && value.progress >= 0 && value.progress <= 100);
@@ -91,7 +100,7 @@ function parseImageJobList(value: unknown): ImageJobListResponse {
 async function requestImageJob(path: string, init?: RequestInit): Promise<ImageJobResponse> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  if (init?.body) headers.set("Content-Type", "application/json");
+  if (init?.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers,
@@ -115,13 +124,29 @@ export function createImageJob(input: ImageJobCreate): Promise<ImageJobResponse>
   });
 }
 
+export function createImageEditJob(input: ImageEditJobCreate): Promise<ImageJobResponse> {
+  const form = new FormData();
+  form.set("prompt", input.prompt);
+  form.set("aspectRatio", input.aspectRatio);
+  form.set("style", input.style);
+  if (typeof input.seed === "number") form.set("seed", String(input.seed));
+  form.set("source", input.source);
+  if (input.faceReference) form.set("faceReference", input.faceReference);
+  return requestImageJob("/api/v1/image-edit-jobs", { method: "POST", body: form });
+}
+
 export function fetchImageJob(jobId: string, signal?: AbortSignal): Promise<ImageJobResponse> {
   return requestImageJob(`/api/v1/image-jobs/${encodeURIComponent(jobId)}`, { signal });
 }
 
-export async function fetchImageJobs(limit = 24, status?: ImageJobResponse["status"]): Promise<ImageJobResponse[]> {
+export async function fetchImageJobs(
+  limit = 24,
+  status?: ImageJobResponse["status"],
+  operation?: ImageJobResponse["settings"]["operation"],
+): Promise<ImageJobResponse[]> {
   const search = new URLSearchParams({ limit: String(limit) });
   if (status) search.set("status", status);
+  if (operation) search.set("operation", operation);
   const response = await fetch(`${getApiBaseUrl()}/api/v1/image-jobs?${search.toString()}`, {
     headers: { Accept: "application/json" },
   });

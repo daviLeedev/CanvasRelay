@@ -8,7 +8,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.providers.demo import DemoImageProvider
 from app.repositories.image_jobs import ImageJobRepository
-from app.repositories.media import FilesystemMediaStore
+from app.repositories.media import FilesystemMediaStore, FilesystemUploadStore
 
 
 class MutableClock:
@@ -36,6 +36,7 @@ def make_client(
             image_jobs=repository,
             image_provider=provider,
             media_store=FilesystemMediaStore(tmp_path / "media"),
+            upload_store=FilesystemUploadStore(tmp_path / "uploads"),
         )
     )
 
@@ -67,6 +68,8 @@ def test_create_validates_input_and_returns_a_typed_queued_job(tmp_path: Path) -
         "style": "editorial",
         "seed": 42,
         "provider": "demo",
+        "operation": "generate",
+        "hasFaceReference": False,
     }
     assert created["result"] is None
     assert created["error"] is None
@@ -227,3 +230,50 @@ def test_completed_job_event_stream_emits_typed_snapshot(tmp_path: Path) -> None
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "event: job" in response.text
     assert '"status":"completed"' in response.text
+
+
+def test_image_edit_accepts_source_and_optional_face_reference(tmp_path: Path) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    image = b"\x89PNG\r\n\x1a\ncanvasrelay-test"
+
+    response = client.post(
+        "/api/v1/image-edit-jobs",
+        data={
+            "prompt": "Replace the background with a quiet studio wall",
+            "aspectRatio": "4:3",
+            "style": "editorial",
+            "seed": "91",
+        },
+        files={
+            "source": ("source.png", image, "image/png"),
+            "faceReference": ("face.png", image, "image/png"),
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["settings"]["operation"] == "edit"
+    assert payload["settings"]["hasFaceReference"] is True
+    assert list((tmp_path / "uploads").glob(f"{payload['id']}_source.png"))
+    assert list((tmp_path / "uploads").glob(f"{payload['id']}_face.png"))
+
+    listed = client.get("/api/v1/image-jobs?operation=edit").json()["items"]
+    assert [item["id"] for item in listed] == [payload["id"]]
+
+
+def test_image_edit_rejects_invalid_upload_without_exposing_internals(tmp_path: Path) -> None:
+    client = make_client(MutableClock(), tmp_path)
+
+    response = client.post(
+        "/api/v1/image-edit-jobs",
+        data={
+            "prompt": "Use a clean studio background",
+            "aspectRatio": "1:1",
+            "style": "product",
+        },
+        files={"source": ("source.txt", b"not-an-image", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Choose a valid PNG, JPEG, or WebP image."}

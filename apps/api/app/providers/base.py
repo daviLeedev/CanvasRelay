@@ -31,7 +31,16 @@ class ImageGenerationProvider(Protocol):
 
     async def describe(self) -> ProviderDescriptor: ...
 
+    async def describe_edit(self) -> ProviderDescriptor: ...
+
     async def submit(self, request: ImageGenerationRequest) -> str: ...
+
+    async def submit_edit(
+        self,
+        request: ImageGenerationRequest,
+        source: ProviderContent,
+        face_reference: ProviderContent | None,
+    ) -> str: ...
 
     def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None: ...
 

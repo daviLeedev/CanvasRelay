@@ -78,6 +78,7 @@ export function LibraryWorkspace() {
                   <div className={styles.meta}>
                     <p title={job.prompt}>{job.prompt}</p>
                     <dl>
+                      <div><dt>Type</dt><dd>{job.settings.operation === "edit" ? "Edit" : "Generate"}</dd></div>
                       <div><dt>Provider</dt><dd>{job.settings.provider}</dd></div>
                       <div><dt>Ratio</dt><dd>{job.settings.aspectRatio}</dd></div>
                       <div><dt>Created</dt><dd>{formatCreatedAt(job.createdAt)}</dd></div>

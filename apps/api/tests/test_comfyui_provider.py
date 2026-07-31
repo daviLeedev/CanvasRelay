@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.domain.image_jobs import ImageGenerationRequest
+from app.domain.image_jobs import ImageGenerationRequest, ProviderContent
 from app.providers.comfyui import ComfyUIImageProvider
 
 
@@ -26,6 +26,30 @@ def write_workflow(path: Path) -> None:
                     "class_type": "SizeNode",
                     "inputs": {"width": "{{width}}", "height": "{{height}}"},
                 },
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "{{filename_prefix}}"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_edit_workflow(path: Path, *, include_face: bool) -> None:
+    inputs: dict[str, Any] = {
+        "prompt": "{{prompt}}",
+        "seed": "{{seed}}",
+        "width": "{{width}}",
+        "height": "{{height}}",
+        "source": "{{source_image}}",
+    }
+    if include_face:
+        inputs["face"] = "{{face_image}}"
+    path.write_text(
+        json.dumps(
+            {
+                "1": {"class_type": "EditNode", "inputs": inputs},
                 "9": {
                     "class_type": "SaveImage",
                     "inputs": {"filename_prefix": "{{filename_prefix}}"},
@@ -101,6 +125,62 @@ async def test_comfyui_submits_bound_api_workflow_and_collects_output(tmp_path: 
     assert snapshot.status == "completed"
     assert snapshot.result is not None and snapshot.result.mime_type == "image/png"
     assert content.body == b"safe-png-content"
+
+
+@pytest.mark.anyio
+async def test_comfyui_uploads_optional_face_and_selects_face_edit_workflow(
+    tmp_path: Path,
+) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    edit_path = tmp_path / "edit.json"
+    face_path = tmp_path / "edit-face.json"
+    write_workflow(workflow_path)
+    write_edit_workflow(edit_path, include_face=False)
+    write_edit_workflow(face_path, include_face=True)
+    submitted: dict[str, Any] = {}
+    uploaded: list[bytes] = []
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        if http_request.url.path == "/upload/image":
+            uploaded.append(http_request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "name": f"upload_{len(uploaded)}.png",
+                    "subfolder": "canvasrelay",
+                },
+            )
+        if http_request.url.path == "/prompt":
+            submitted.update(json.loads(http_request.content))
+            return httpx.Response(200, json={"prompt_id": "provider_edit"})
+        raise AssertionError(
+            f"Unexpected request: {http_request.method} {http_request.url.path}"
+        )
+
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        edit_workflow_path=edit_path,
+        edit_face_workflow_path=face_path,
+        transport=httpx.MockTransport(handler),
+    )
+
+    provider_job_id = await provider.submit_edit(
+        request(),
+        ProviderContent(b"source-image", "image/png"),
+        ProviderContent(b"face-image", "image/png"),
+    )
+
+    assert provider_job_id == "provider_edit"
+    assert len(uploaded) == 2
+    assert submitted["prompt"]["1"]["inputs"] == {
+        "prompt": "A calm studio product photograph",
+        "seed": 47,
+        "width": 1152,
+        "height": 864,
+        "source": "canvasrelay/upload_1.png",
+        "face": "canvasrelay/upload_2.png",
+    }
 
 
 @pytest.mark.anyio

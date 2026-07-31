@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from app.domain.image_jobs import (
     AspectRatio,
+    ImageJobOperation,
     ImageJobRecord,
     ImageJobStatus,
     ImageMimeType,
@@ -58,6 +59,9 @@ class ImageJobRepository:
                     style TEXT NOT NULL,
                     seed INTEGER NOT NULL,
                     provider TEXT NOT NULL,
+                    operation TEXT NOT NULL DEFAULT 'generate',
+                    source_path TEXT,
+                    face_reference_path TEXT,
                     created_at TEXT NOT NULL,
                     provider_job_id TEXT,
                     status TEXT NOT NULL,
@@ -76,6 +80,21 @@ class ImageJobRepository:
                 )
                 """
             )
+            columns = {
+                cast(str, row["name"])
+                for row in self._connection.execute("PRAGMA table_info(image_jobs)").fetchall()
+            }
+            migrations = {
+                "operation": (
+                    "ALTER TABLE image_jobs ADD COLUMN operation "
+                    "TEXT NOT NULL DEFAULT 'generate'"
+                ),
+                "source_path": "ALTER TABLE image_jobs ADD COLUMN source_path TEXT",
+                "face_reference_path": "ALTER TABLE image_jobs ADD COLUMN face_reference_path TEXT",
+            }
+            for column, statement in migrations.items():
+                if column not in columns:
+                    self._connection.execute(statement)
             self._connection.execute(
                 "CREATE INDEX IF NOT EXISTS image_jobs_created_idx "
                 "ON image_jobs(created_at DESC)"
@@ -97,6 +116,7 @@ class ImageJobRepository:
         style: ImageStyle,
         seed: int | None,
         provider: ImageProviderName,
+        operation: ImageJobOperation = "generate",
     ) -> ImageJobRecord:
         normalized_prompt = normalize_prompt(prompt)
         record = ImageJobRecord(
@@ -107,6 +127,7 @@ class ImageJobRepository:
             seed=resolve_seed(normalized_prompt, aspect_ratio, style, seed),
             provider=provider,
             created_at=self.now(),
+            operation=operation,
         )
         with self._lock:
             self._write(record)
@@ -127,18 +148,24 @@ class ImageJobRepository:
         *,
         limit: int = 24,
         status: ImageJobStatus | None = None,
+        operation: ImageJobOperation | None = None,
     ) -> list[ImageJobRecord]:
         bounded_limit = max(1, min(limit, 100))
         query = "SELECT * FROM image_jobs"
-        parameters: tuple[object, ...]
-        if status is None:
-            parameters = (bounded_limit,)
-        else:
-            query += " WHERE status = ?"
-            parameters = (status, bounded_limit)
+        filters: list[str] = []
+        values: list[object] = []
+        if status is not None:
+            filters.append("status = ?")
+            values.append(status)
+        if operation is not None:
+            filters.append("operation = ?")
+            values.append(operation)
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
         query += " ORDER BY created_at DESC LIMIT ?"
+        values.append(bounded_limit)
         with self._lock:
-            rows = self._connection.execute(query, parameters).fetchall()
+            rows = self._connection.execute(query, tuple(values)).fetchall()
         return [self._from_row(row) for row in rows]
 
     def list_active(self) -> list[ImageJobRecord]:
@@ -153,6 +180,22 @@ class ImageJobRepository:
         with self._lock:
             record = self._required(job_id)
             record = replace(record, provider_job_id=provider_job_id)
+            self._write(record)
+        return record
+
+    def attach_inputs(
+        self,
+        job_id: str,
+        *,
+        source_path: str,
+        face_reference_path: str | None,
+    ) -> ImageJobRecord:
+        with self._lock:
+            record = replace(
+                self._required(job_id),
+                source_path=source_path,
+                face_reference_path=face_reference_path,
+            )
             self._write(record)
         return record
 
@@ -205,17 +248,21 @@ class ImageJobRepository:
         self._connection.execute(
             """
             INSERT INTO image_jobs (
-                id, prompt, aspect_ratio, style, seed, provider, created_at,
+                id, prompt, aspect_ratio, style, seed, provider, operation,
+                source_path, face_reference_path, created_at,
                 provider_job_id, status, progress, started_at, completed_at,
                 result_mime_type, result_width, result_height, result_path,
                 error_code, error_message, error_action, error_retryable, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 prompt = excluded.prompt,
                 aspect_ratio = excluded.aspect_ratio,
                 style = excluded.style,
                 seed = excluded.seed,
                 provider = excluded.provider,
+                operation = excluded.operation,
+                source_path = excluded.source_path,
+                face_reference_path = excluded.face_reference_path,
                 provider_job_id = excluded.provider_job_id,
                 status = excluded.status,
                 progress = excluded.progress,
@@ -238,6 +285,9 @@ class ImageJobRepository:
                 record.style,
                 record.seed,
                 record.provider,
+                record.operation,
+                record.source_path,
+                record.face_reference_path,
                 self._format_datetime(record.created_at),
                 record.provider_job_id,
                 record.status,
@@ -282,6 +332,9 @@ class ImageJobRepository:
             seed=cast(int, row["seed"]),
             provider=cast(ImageProviderName, row["provider"]),
             created_at=ImageJobRepository._parse_datetime(row["created_at"]),
+            operation=cast(ImageJobOperation, row["operation"]),
+            source_path=cast(str | None, row["source_path"]),
+            face_reference_path=cast(str | None, row["face_reference_path"]),
             provider_job_id=cast(str | None, row["provider_job_id"]),
             status=cast(ImageJobStatus, row["status"]),
             progress=cast(int | None, row["progress"]),

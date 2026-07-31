@@ -11,6 +11,7 @@ type ImageStyle = Literal["editorial", "product", "concept"]
 type ImageProviderName = Literal["demo", "comfyui"]
 type ImageJobStatus = Literal["queued", "running", "completed", "failed", "canceled"]
 type ImageMimeType = Literal["image/svg+xml", "image/png", "image/jpeg", "image/webp"]
+type ImageJobOperation = Literal["generate", "edit"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,9 @@ class ImageJobRecord:
     seed: int
     provider: ImageProviderName
     created_at: datetime
+    operation: ImageJobOperation = "generate"
+    source_path: str | None = None
+    face_reference_path: str | None = None
     provider_job_id: str | None = None
     status: ImageJobStatus = "queued"
     progress: int | None = 0

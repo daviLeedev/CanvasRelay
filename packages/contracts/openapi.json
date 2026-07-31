@@ -10,6 +10,60 @@
         ],
         "type": "string"
       },
+      "Body_create_image_edit_job_api_v1_image_edit_jobs_post": {
+        "properties": {
+          "aspectRatio": {
+            "$ref": "#/components/schemas/AspectRatio"
+          },
+          "faceReference": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facereference"
+          },
+          "prompt": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "source": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Source",
+            "type": "string"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ImageStyle"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspectRatio",
+          "style",
+          "source"
+        ],
+        "title": "Body_create_image_edit_job_api_v1_image_edit_jobs_post",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -139,6 +193,13 @@
         "title": "ImageJobListResponse",
         "type": "object"
       },
+      "ImageJobOperation": {
+        "enum": [
+          "generate",
+          "edit"
+        ],
+        "type": "string"
+      },
       "ImageJobResponse": {
         "properties": {
           "completedAt": {
@@ -265,6 +326,13 @@
           "aspectRatio": {
             "$ref": "#/components/schemas/AspectRatio"
           },
+          "hasFaceReference": {
+            "title": "Hasfacereference",
+            "type": "boolean"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ImageJobOperation"
+          },
           "provider": {
             "$ref": "#/components/schemas/ImageProviderName"
           },
@@ -280,7 +348,9 @@
           "aspectRatio",
           "style",
           "seed",
-          "provider"
+          "provider",
+          "operation",
+          "hasFaceReference"
         ],
         "title": "ImageJobSettings",
         "type": "object"
@@ -425,6 +495,47 @@
         ]
       }
     },
+    "/api/v1/image-edit-jobs": {
+      "post": {
+        "operationId": "create_image_edit_job_api_v1_image_edit_jobs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_image_edit_job_api_v1_image_edit_jobs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Image Edit Job",
+        "tags": [
+          "image edit jobs"
+        ]
+      }
+    },
     "/api/v1/image-jobs": {
       "get": {
         "operationId": "list_image_jobs_api_v1_image_jobs_get",
@@ -455,6 +566,22 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ImageJobOperation"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation"
             }
           }
         ],
@@ -693,6 +820,27 @@
           }
         },
         "summary": "Get Image Provider",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/v1/providers/image-edit": {
+      "get": {
+        "operationId": "get_image_edit_provider_api_v1_providers_image_edit_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Image Edit Provider",
         "tags": [
           "providers"
         ]

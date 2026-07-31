@@ -16,8 +16,8 @@ function isImageProviderResponse(value: unknown): value is ImageProviderResponse
   );
 }
 
-export async function fetchImageProvider(signal?: AbortSignal): Promise<ImageProviderResponse> {
-  const response = await fetch(`${getApiBaseUrl()}/api/v1/providers/image`, {
+async function fetchProvider(path: string, signal?: AbortSignal): Promise<ImageProviderResponse> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     headers: { Accept: "application/json" },
     signal,
   });
@@ -25,4 +25,12 @@ export async function fetchImageProvider(signal?: AbortSignal): Promise<ImagePro
   const payload: unknown = await response.json();
   if (!isImageProviderResponse(payload)) throw new Error("The image provider returned an invalid status.");
   return payload;
+}
+
+export function fetchImageProvider(signal?: AbortSignal): Promise<ImageProviderResponse> {
+  return fetchProvider("/api/v1/providers/image", signal);
+}
+
+export function fetchImageEditProvider(signal?: AbortSignal): Promise<ImageProviderResponse> {
+  return fetchProvider("/api/v1/providers/image-edit", signal);
 }

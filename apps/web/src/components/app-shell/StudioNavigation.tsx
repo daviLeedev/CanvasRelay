@@ -1,6 +1,6 @@
 "use client";
 
-import { Images, PanelsTopLeft } from "lucide-react";
+import { ImagePlus, Images, PanelsTopLeft } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ import styles from "./AppShell.module.css";
 
 const destinations = [
   { href: "/image", label: "Image studio", icon: PanelsTopLeft },
+  { href: "/edit", label: "Image edit", icon: ImagePlus },
   { href: "/library", label: "Library", icon: Images },
 ] as const;
 

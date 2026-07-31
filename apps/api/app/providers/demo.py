@@ -37,10 +37,22 @@ class DemoImageProvider:
             "Ready without a GPU or model files.",
         )
 
+    async def describe_edit(self) -> ProviderDescriptor:
+        return await self.describe()
+
     async def submit(self, request: ImageGenerationRequest) -> str:
         with self._lock:
             self._jobs[request.job_id] = request
         return request.job_id
+
+    async def submit_edit(
+        self,
+        request: ImageGenerationRequest,
+        source: ProviderContent,
+        face_reference: ProviderContent | None,
+    ) -> str:
+        del source, face_reference
+        return await self.submit(request)
 
     def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None:
         with self._lock:

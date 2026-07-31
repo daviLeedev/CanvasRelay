@@ -1,0 +1,440 @@
+.workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.toolbar {
+  z-index: 10;
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.title span,
+.panelHeading span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.title h1,
+.panelHeading h2 {
+  margin: 3px 0 0;
+  letter-spacing: 0;
+}
+
+.title h1 {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.toolbarStatus,
+.workflowMode {
+  display: flex;
+  align-items: center;
+}
+
+.toolbarStatus {
+  gap: var(--space-3);
+}
+
+.workflowMode {
+  min-height: 30px;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workflowMode svg {
+  color: var(--accent);
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  min-height: 0;
+  background: #090c10;
+}
+
+.comparisonPane {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.comparisonPane + .comparisonPane {
+  border-left: 1px solid var(--border);
+}
+
+.comparisonPane > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: #10151b;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.comparisonPane > header strong {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.mediaFrame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mediaFrame img {
+  object-fit: contain;
+}
+
+.emptyStage {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.emptyStage[data-active="true"] strong {
+  color: var(--accent-strong);
+  font-size: 24px;
+}
+
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.editPanel {
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHeading {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.panelHeading h2 {
+  font-size: 14px;
+}
+
+.modePill {
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.modePill[data-mode="live"] {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+  color: var(--success);
+}
+
+.editForm {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.fileField {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
+.fileLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.fileLabel span {
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.dropzone {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-height: 58px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--control);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dropzone:hover,
+.dropzone:focus-within {
+  border-color: var(--accent);
+}
+
+.dropzone > img,
+.dropzone > svg {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+}
+
+.dropzone > svg {
+  padding: 12px;
+  background: #0b0e12;
+}
+
+.dropzone > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dropzone strong,
+.dropzone small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropzone strong {
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.dropzone small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.dropzone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.clearFile {
+  position: absolute;
+  right: 7px;
+  bottom: 19px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.promptInput,
+.seedInput {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--control);
+  color: var(--text-primary);
+}
+
+.promptInput {
+  min-height: 88px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.45;
+}
+
+.seedInput {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.settingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.actions > button:first-child {
+  width: 100%;
+}
+
+.liveJob {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4) var(--space-4);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.liveJob strong {
+  color: var(--text-primary);
+}
+
+.editError {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-4);
+  padding: var(--space-3);
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface-raised));
+}
+
+.editError strong,
+.editError p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.editError p {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.editError button {
+  justify-self: start;
+}
+
+@media (max-width: 1000px) {
+  .workspace {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .contentGrid {
+    display: block;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .stage {
+    height: 540px;
+    min-height: 540px;
+  }
+
+  .inspector {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+    overflow: visible;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .workspace {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .toolbar {
+    position: sticky;
+    top: 48px;
+    min-height: 60px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .title span,
+  .toolbarStatus > :first-child {
+    display: none;
+  }
+
+  .title h1 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .contentGrid,
+  .stage,
+  .inspector {
+    display: block;
+  }
+
+  .contentGrid {
+    overflow: visible;
+  }
+
+  .stage {
+    height: auto;
+    min-height: 0;
+  }
+
+  .comparisonPane {
+    min-height: 420px;
+  }
+
+  .comparisonPane + .comparisonPane {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .inspector {
+    border-top: 1px solid var(--border);
+  }
+
+  .settingGrid {
+    grid-template-columns: 1fr;
+  }
+}

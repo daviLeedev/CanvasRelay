@@ -31,6 +31,7 @@ PLACEHOLDERS = {
     "{{height}}",
     "{{filename_prefix}}",
 }
+EDIT_PLACEHOLDERS = PLACEHOLDERS | {"{{source_image}}"}
 
 
 @dataclass(slots=True)
@@ -57,6 +58,8 @@ class ComfyUIImageProvider:
         *,
         base_url: str,
         workflow_path: Path | None,
+        edit_workflow_path: Path | None = None,
+        edit_face_workflow_path: Path | None = None,
         output_node_id: str | None = None,
         timeout_seconds: float = 30,
         max_result_bytes: int = 50 * 1024 * 1024,
@@ -64,6 +67,8 @@ class ComfyUIImageProvider:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._workflow_path = workflow_path
+        self._edit_workflow_path = edit_workflow_path
+        self._edit_face_workflow_path = edit_face_workflow_path
         self._output_node_id = output_node_id.strip() if output_node_id else None
         self._timeout = httpx.Timeout(timeout_seconds, connect=min(5, timeout_seconds))
         self._max_result_bytes = max_result_bytes
@@ -92,8 +97,68 @@ class ComfyUIImageProvider:
             "Connected to the configured local generation workflow.",
         )
 
+    async def describe_edit(self) -> ProviderDescriptor:
+        try:
+            if self._edit_workflow_path is None:
+                raise self._workflow_missing_error()
+            self._load_workflow(self._edit_workflow_path)
+            response = await self._request("GET", "/system_stats")
+            if not isinstance(response.json(), Mapping):
+                raise ValueError("invalid system response")
+        except (ImageProviderError, httpx.HTTPError, ValueError, json.JSONDecodeError):
+            return ProviderDescriptor(
+                "comfyui",
+                "Local ComfyUI",
+                False,
+                "ComfyUI or its image edit workflow is not ready.",
+            )
+        return ProviderDescriptor(
+            "comfyui",
+            "Local ComfyUI",
+            True,
+            "Connected to the configured local image edit workflow.",
+        )
+
     async def submit(self, request: ImageGenerationRequest) -> str:
         workflow = self._bind_workflow(self._load_workflow(), request)
+        return await self._submit_workflow(request, workflow)
+
+    async def submit_edit(
+        self,
+        request: ImageGenerationRequest,
+        source: ProviderContent,
+        face_reference: ProviderContent | None,
+    ) -> str:
+        source_name = await self._upload_image(request.job_id, "source", source)
+        face_name = None
+        workflow_path = self._edit_workflow_path
+        if workflow_path is None:
+            raise self._workflow_missing_error()
+        if face_reference is not None:
+            face_name = await self._upload_image(request.job_id, "face", face_reference)
+            workflow_path = self._edit_face_workflow_path
+            if workflow_path is None:
+                raise ImageProviderError(
+                    ProviderErrorDetails(
+                        "face_workflow_missing",
+                        "The optional face-reference workflow is not configured.",
+                        "Configure the local face-reference template or remove the optional image.",
+                        False,
+                    )
+                )
+        workflow = self._bind_edit_workflow(
+            self._load_workflow(workflow_path),
+            request,
+            source_name,
+            face_name,
+        )
+        return await self._submit_workflow(request, workflow)
+
+    async def _submit_workflow(
+        self,
+        request: ImageGenerationRequest,
+        workflow: dict[str, Any],
+    ) -> str:
         try:
             response = await self._request(
                 "POST",
@@ -111,6 +176,42 @@ class ComfyUIImageProvider:
         with self._lock:
             self._jobs[provider_job_id] = _TrackedComfyJob(request, datetime.now(UTC))
         return provider_job_id
+
+    async def _upload_image(
+        self,
+        job_id: str,
+        role: str,
+        content: ProviderContent,
+    ) -> str:
+        extension = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/webp": ".webp",
+        }.get(content.mime_type)
+        if extension is None:
+            raise ImageProviderError(
+                ProviderErrorDetails(
+                    "upload_type_invalid",
+                    "The selected image format is not supported for editing.",
+                    "Choose a PNG, JPEG, or WebP image.",
+                    False,
+                )
+            )
+        try:
+            response = await self._request(
+                "POST",
+                "/upload/image",
+                data={"type": "input", "subfolder": "canvasrelay", "overwrite": "false"},
+                files={"image": (f"{job_id}_{role}{extension}", content.body, content.mime_type)},
+            )
+            payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise self._unavailable_error() from error
+        name = payload.get("name") if isinstance(payload, Mapping) else None
+        subfolder = payload.get("subfolder") if isinstance(payload, Mapping) else None
+        if not isinstance(name, str) or not name:
+            raise self._unavailable_error()
+        return f"{subfolder}/{name}" if isinstance(subfolder, str) and subfolder else name
 
     def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None:
         with self._lock:
@@ -263,8 +364,8 @@ class ComfyUIImageProvider:
         except httpx.HTTPError as error:
             raise self._unavailable_error() from error
 
-    def _load_workflow(self) -> dict[str, Any]:
-        path = self._workflow_path
+    def _load_workflow(self, workflow_path: Path | None = None) -> dict[str, Any]:
+        path = workflow_path if workflow_path is not None else self._workflow_path
         if path is None or not path.is_file():
             raise ImageProviderError(
                 ProviderErrorDetails(
@@ -308,6 +409,17 @@ class ComfyUIImageProvider:
                 )
         return workflow
 
+    @staticmethod
+    def _workflow_missing_error() -> ImageProviderError:
+        return ImageProviderError(
+            ProviderErrorDetails(
+                "workflow_missing",
+                "The ComfyUI API workflow is not configured.",
+                "Set the server workflow path to an API-format JSON template.",
+                False,
+            )
+        )
+
     def _bind_workflow(
         self,
         workflow: dict[str, Any],
@@ -350,6 +462,51 @@ class ComfyUIImageProvider:
                     "workflow_bindings_missing",
                     "The ComfyUI workflow is missing required CanvasRelay placeholders.",
                     "Add prompt, seed, width, and height placeholders to the API workflow.",
+                    False,
+                )
+            )
+        return cast(dict[str, Any], bound)
+
+    def _bind_edit_workflow(
+        self,
+        workflow: dict[str, Any],
+        request: ImageGenerationRequest,
+        source_image: str,
+        face_image: str | None,
+    ) -> dict[str, Any]:
+        width, height = image_dimensions(request.aspect_ratio)
+        replacements: dict[str, str | int] = {
+            "{{prompt}}": request.prompt,
+            "{{seed}}": request.seed,
+            "{{width}}": width,
+            "{{height}}": height,
+            "{{filename_prefix}}": f"canvasrelay/{request.job_id}",
+            "{{source_image}}": source_image,
+        }
+        if face_image is not None:
+            replacements["{{face_image}}"] = face_image
+        seen: set[str] = set()
+
+        def replace_value(value: Any) -> Any:
+            if isinstance(value, str) and value in replacements:
+                seen.add(value)
+                return replacements[value]
+            if isinstance(value, list):
+                return [replace_value(item) for item in value]
+            if isinstance(value, dict):
+                return {key: replace_value(item) for key, item in value.items()}
+            return value
+
+        bound = replace_value(deepcopy(workflow))
+        required = EDIT_PLACEHOLDERS - {"{{filename_prefix}}"}
+        if face_image is not None:
+            required.add("{{face_image}}")
+        if not isinstance(bound, dict) or not required.issubset(seen):
+            raise ImageProviderError(
+                ProviderErrorDetails(
+                    "workflow_bindings_missing",
+                    "The ComfyUI image edit workflow is missing required placeholders.",
+                    "Add source, prompt, seed, width, and height bindings to the local template.",
                     False,
                 )
             )

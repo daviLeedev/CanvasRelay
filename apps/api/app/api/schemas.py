@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.image_jobs import (
     AspectRatio,
+    ImageJobOperation,
     ImageJobStatus,
     ImageMimeType,
     ImageProviderName,
@@ -43,6 +44,8 @@ class ImageJobSettings(ApiModel):
     style: ImageStyle
     seed: int
     provider: ImageProviderName
+    operation: ImageJobOperation
+    has_face_reference: bool = Field(alias="hasFaceReference")
 
 
 class ImageJobResult(ApiModel):

@@ -5,26 +5,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   cancelImageJob,
-  createImageJob,
+  createImageEditJob,
   fetchImageJob,
   fetchImageJobs,
   subscribeImageJob,
-  type ImageJobCreate,
+  type ImageEditJobCreate,
   type ImageJobResponse,
 } from "@/lib/api/imageJobs";
 
 const POLL_INTERVAL_MS = 1_000;
+const RECENT_QUERY_KEY = ["image-jobs", "recent", "edit"] as const;
 
-export function useImageGenerationJob() {
+export function useImageEditJob() {
   const queryClient = useQueryClient();
   const submittingRef = useRef(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [lastRequest, setLastRequest] = useState<ImageJobCreate | null>(null);
+  const [lastRequest, setLastRequest] = useState<ImageEditJobCreate | null>(null);
   const [streamJobId, setStreamJobId] = useState<string | null>(null);
 
   const recentQuery = useQuery({
-    queryKey: ["image-jobs", "recent", "generate"],
-    queryFn: () => fetchImageJobs(24, undefined, "generate"),
+    queryKey: RECENT_QUERY_KEY,
+    queryFn: () => fetchImageJobs(24, undefined, "edit"),
   });
 
   const restoredId = useMemo(() => {
@@ -46,10 +47,10 @@ export function useImageGenerationJob() {
   });
 
   const createMutation = useMutation({
-    mutationFn: createImageJob,
+    mutationFn: createImageEditJob,
     onSuccess: (job) => {
       queryClient.setQueryData(["image-job", job.id], job);
-      queryClient.setQueryData<ImageJobResponse[]>(["image-jobs", "recent", "generate"], (current = []) => [
+      queryClient.setQueryData<ImageJobResponse[]>(RECENT_QUERY_KEY, (current = []) => [
         job,
         ...current.filter((item) => item.id !== job.id),
       ]);
@@ -64,7 +65,7 @@ export function useImageGenerationJob() {
     },
     onSuccess: (job) => {
       queryClient.setQueryData(["image-job", job.id], job);
-      void queryClient.invalidateQueries({ queryKey: ["image-jobs", "recent", "generate"] });
+      void queryClient.invalidateQueries({ queryKey: RECENT_QUERY_KEY });
     },
   });
 
@@ -83,7 +84,7 @@ export function useImageGenerationJob() {
       (nextJob) => {
         queryClient.setQueryData(["image-job", nextJob.id], nextJob);
         if (nextJob.status !== "queued" && nextJob.status !== "running") {
-          void queryClient.invalidateQueries({ queryKey: ["image-jobs", "recent", "generate"] });
+          void queryClient.invalidateQueries({ queryKey: RECENT_QUERY_KEY });
         }
       },
       () => setStreamJobId((current) => (current === selectedId ? null : current)),
@@ -92,7 +93,7 @@ export function useImageGenerationJob() {
   }, [active, queryClient, selectedId]);
 
   const submit = useCallback(
-    async (input: ImageJobCreate) => {
+    async (input: ImageEditJobCreate) => {
       if (submittingRef.current || active) return null;
       submittingRef.current = true;
       setLastRequest(input);
@@ -126,8 +127,6 @@ export function useImageGenerationJob() {
     return null;
   }, [jobQuery, lastRequest, selectedId, submit]);
 
-  const selectJob = useCallback((jobId: string) => setActiveId(jobId), []);
-
   return {
     job,
     submit,
@@ -141,6 +140,6 @@ export function useImageGenerationJob() {
     canRetry: lastRequest !== null || (jobQuery.isError && selectedId !== null),
     recentJobs: recentQuery.data ?? [],
     isLoadingRecent: recentQuery.isPending,
-    selectJob,
+    selectJob: setActiveId,
   };
 }

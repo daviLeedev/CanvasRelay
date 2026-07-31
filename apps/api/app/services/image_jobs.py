@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.domain.image_jobs import (
     AspectRatio,
     ImageGenerationRequest,
+    ImageJobOperation,
     ImageJobRecord,
     ImageJobStatus,
     ImageProviderName,
@@ -13,7 +14,11 @@ from app.domain.image_jobs import (
 )
 from app.providers.base import ImageGenerationProvider, ImageProviderError, ProviderDescriptor
 from app.repositories.image_jobs import TERMINAL_STATUSES, ImageJobRepository
-from app.repositories.media import FilesystemMediaStore, MediaNotFoundError
+from app.repositories.media import (
+    FilesystemMediaStore,
+    FilesystemUploadStore,
+    MediaNotFoundError,
+)
 
 
 class ImageJobService:
@@ -22,10 +27,14 @@ class ImageJobService:
         repository: ImageJobRepository,
         provider: ImageGenerationProvider,
         media_store: FilesystemMediaStore,
+        upload_store: FilesystemUploadStore,
+        max_upload_bytes: int = 20 * 1024 * 1024,
     ) -> None:
         self.repository = repository
         self.provider = provider
         self.media_store = media_store
+        self.upload_store = upload_store
+        self.max_upload_bytes = max_upload_bytes
         self._resume_active_jobs()
 
     @property
@@ -34,6 +43,9 @@ class ImageJobService:
 
     async def describe_provider(self) -> ProviderDescriptor:
         return await self.provider.describe()
+
+    async def describe_edit_provider(self) -> ProviderDescriptor:
+        return await self.provider.describe_edit()
 
     async def create(
         self,
@@ -57,16 +69,58 @@ class ImageJobService:
             return self.repository.fail_submission(record.id, error.details)
         return self.repository.attach_provider_job(record.id, provider_job_id)
 
+    async def create_edit(
+        self,
+        *,
+        prompt: str,
+        aspect_ratio: AspectRatio,
+        style: ImageStyle,
+        seed: int | None,
+        source: ProviderContent,
+        face_reference: ProviderContent | None,
+    ) -> ImageJobRecord:
+        record = self.repository.create(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            style=style,
+            seed=seed,
+            provider=self.provider.name,
+            operation="edit",
+        )
+        try:
+            source_path = self.upload_store.save(record.id, "source", source)
+            face_path = (
+                self.upload_store.save(record.id, "face", face_reference)
+                if face_reference is not None
+                else None
+            )
+            record = self.repository.attach_inputs(
+                record.id,
+                source_path=source_path,
+                face_reference_path=face_path,
+            )
+            provider_job_id = await self.provider.submit_edit(
+                self._request(record),
+                source,
+                face_reference,
+            )
+        except ImageProviderError as error:
+            return self.repository.fail_submission(record.id, error.details)
+        except (OSError, ValueError):
+            return self.repository.fail_submission(record.id, self._upload_persist_error())
+        return self.repository.attach_provider_job(record.id, provider_job_id)
+
     async def list_recent(
         self,
         *,
         limit: int = 24,
         status: ImageJobStatus | None = None,
+        operation: ImageJobOperation | None = None,
     ) -> list[ImageJobRecord]:
         if status is not None:
             for active_record in self.repository.list_active():
                 await self.get(active_record.id)
-        records = self.repository.list_recent(limit=limit, status=status)
+        records = self.repository.list_recent(limit=limit, status=status, operation=operation)
         refreshed: list[ImageJobRecord] = []
         for record in records:
             if record.status in TERMINAL_STATUSES:
@@ -187,4 +241,13 @@ class ImageJobService:
             "This saved job belongs to a different image provider.",
             "Switch back to the original provider or create a new image job.",
             False,
+        )
+
+    @staticmethod
+    def _upload_persist_error() -> ProviderErrorDetails:
+        return ProviderErrorDetails(
+            "upload_persist_failed",
+            "CanvasRelay could not store the selected image.",
+            "Check the configured data directory and choose the image again.",
+            True,
         )
