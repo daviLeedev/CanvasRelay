@@ -123,6 +123,22 @@
         "title": "ImageJobError",
         "type": "object"
       },
+      "ImageJobListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImageJobResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ImageJobListResponse",
+        "type": "object"
+      },
       "ImageJobResponse": {
         "properties": {
           "completedAt": {
@@ -410,6 +426,65 @@
       }
     },
     "/api/v1/image-jobs": {
+      "get": {
+        "operationId": "list_image_jobs_api_v1_image_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ImageJobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Image Jobs",
+        "tags": [
+          "image jobs"
+        ]
+      },
       "post": {
         "operationId": "create_image_job_api_v1_image_jobs_post",
         "requestBody": {
@@ -527,6 +602,41 @@
           }
         },
         "summary": "Get Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}/events": {
+      "get": {
+        "operationId": "stream_image_job_api_v1_image_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Image Job",
         "tags": [
           "image jobs"
         ]

@@ -112,6 +112,13 @@ class ComfyUIImageProvider:
             self._jobs[provider_job_id] = _TrackedComfyJob(request, datetime.now(UTC))
         return provider_job_id
 
+    def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None:
+        with self._lock:
+            self._jobs.setdefault(
+                provider_job_id,
+                _TrackedComfyJob(request, datetime.now(UTC)),
+            )
+
     async def poll(self, provider_job_id: str) -> ProviderSnapshot:
         tracked = self._get_tracked(provider_job_id)
         try:

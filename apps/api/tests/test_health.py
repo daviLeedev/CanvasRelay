@@ -1,13 +1,26 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
+from app.repositories.image_jobs import ImageJobRepository
+from app.repositories.media import FilesystemMediaStore
 
 
-def test_health_returns_the_public_contract() -> None:
-    client = TestClient(create_app(Settings(env="test", demo_mode=True)))
+def make_client(settings: Settings, tmp_path: Path) -> TestClient:
+    return TestClient(
+        create_app(
+            settings,
+            image_jobs=ImageJobRepository(),
+            media_store=FilesystemMediaStore(tmp_path / "media"),
+        )
+    )
+
+
+def test_health_returns_the_public_contract(tmp_path: Path) -> None:
+    client = make_client(Settings(env="test", demo_mode=True), tmp_path)
 
     response = client.get("/api/v1/health")
 
@@ -24,8 +37,8 @@ def test_health_returns_the_public_contract() -> None:
     assert timestamp.utcoffset() == UTC.utcoffset(timestamp)
 
 
-def test_health_reflects_demo_mode_configuration() -> None:
-    client = TestClient(create_app(Settings(env="test", image_provider="comfyui")))
+def test_health_reflects_demo_mode_configuration(tmp_path: Path) -> None:
+    client = make_client(Settings(env="test", image_provider="comfyui"), tmp_path)
 
     response = client.get("/api/v1/health")
 
@@ -33,9 +46,9 @@ def test_health_reflects_demo_mode_configuration() -> None:
     assert response.json()["demoMode"] is False
 
 
-def test_cors_allows_the_configured_web_origin() -> None:
+def test_cors_allows_the_configured_web_origin(tmp_path: Path) -> None:
     origin = "http://localhost:3000"
-    client = TestClient(create_app(Settings(env="test", cors_origins=origin)))
+    client = make_client(Settings(env="test", cors_origins=origin), tmp_path)
 
     response = client.options(
         "/api/v1/health",

@@ -72,6 +72,10 @@ class ImageJobResponse(ApiModel):
     error: ImageJobError | None
 
 
+class ImageJobListResponse(ApiModel):
+    items: list[ImageJobResponse]
+
+
 class ImageProviderResponse(ApiModel):
     provider: ImageProviderName
     mode: Literal["demo", "live"]

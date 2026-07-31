@@ -13,6 +13,7 @@ import { useHealthQuery } from "@/lib/api/useHealthQuery";
 import { useImageProviderQuery } from "@/lib/api/useImageProviderQuery";
 
 import { StudioStage2D } from "./StudioStage2D";
+import { RecentImageJobs } from "./RecentImageJobs";
 import { ThreeStageBoundary } from "./ThreeStageBoundary";
 import type { DisplayMode, JobStatus } from "./types";
 import { ImageGenerationPanel } from "./ImageGenerationPanel";
@@ -64,13 +65,13 @@ export function StudioWorkspace() {
   const { mode, setMode } = useDisplayPreference();
   const reducedMotion = useReducedMotion();
   const pageVisible = usePageVisibility();
-  const jobs = useMemo(
-    () =>
-      imageGeneration.job
-        ? [projectImageJob(imageGeneration.job), ...sampleJobs.slice(0, 2)]
-        : sampleJobs,
-    [imageGeneration.job, sampleJobs],
-  );
+  const jobs = useMemo(() => {
+    const recent = imageGeneration.recentJobs.slice(0, 3).map(projectImageJob);
+    if (imageGeneration.job && !recent.some((item) => item.id === imageGeneration.job?.id)) {
+      recent.unshift(projectImageJob(imageGeneration.job));
+    }
+    return recent.length > 0 ? recent.slice(0, 3) : sampleJobs;
+  }, [imageGeneration.job, imageGeneration.recentJobs, sampleJobs]);
   const [selectedId, setSelectedId] = useState(sampleJobs[1]?.id ?? sampleJobs[0]?.id ?? "");
   async function submitImageJob(input: Parameters<typeof imageGeneration.submit>[0]) {
     const job = await imageGeneration.submit(input);
@@ -86,6 +87,7 @@ export function StudioWorkspace() {
     () => jobs.find((job) => job.id === selectedId) ?? jobs[0],
     [jobs, selectedId],
   );
+  const effectiveSelectedId = selectedJob?.id ?? "";
   const summary = useMemo(
     () => ({
       queued: jobs.filter((job) => job.status === "queued").length,
@@ -129,18 +131,18 @@ export function StudioWorkspace() {
       <div className={styles.contentGrid}>
         <section className={styles.stage} aria-label={`${mode.toUpperCase()} job stage`}>
           {mode === "2d" ? (
-            <StudioStage2D jobs={jobs} selectedId={selectedId} onSelect={setSelectedId} />
+            <StudioStage2D jobs={jobs} selectedId={effectiveSelectedId} onSelect={setSelectedId} />
           ) : (
             <ThreeStageBoundary
               jobs={jobs}
-              selectedId={selectedId}
+              selectedId={effectiveSelectedId}
               onSelect={setSelectedId}
               onFallback={() => setMode("2d")}
             >
               <Suspense fallback={<div className={styles.stageLoading}>Preparing 3D workspace...</div>}>
                 <LazyStudioStage3D
                   jobs={jobs}
-                  selectedId={selectedId}
+                  selectedId={effectiveSelectedId}
                   onSelect={setSelectedId}
                   reducedMotion={reducedMotion}
                   pageVisible={pageVisible}
@@ -166,6 +168,16 @@ export function StudioWorkspace() {
               onRetry={retryImageJob}
             />
 
+            <RecentImageJobs
+              jobs={imageGeneration.recentJobs}
+              selectedId={imageGeneration.job?.id}
+              loading={imageGeneration.isLoadingRecent}
+              onSelect={(jobId) => {
+                imageGeneration.selectJob(jobId);
+                setSelectedId(jobId);
+              }}
+            />
+
             <section className={styles.jobInspector} aria-labelledby="job-inspector-title">
               <header className={styles.inspectorHeader}>
                 <div>
@@ -179,7 +191,11 @@ export function StudioWorkspace() {
 
               <div className={styles.inspectorBody}>
                 <Field label="Focus job" htmlFor="focus-job" hint="Selection is shared by the 2D and 3D stage.">
-                  <Select id="focus-job" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+                  <Select
+                    id="focus-job"
+                    value={effectiveSelectedId}
+                    onChange={(event) => setSelectedId(event.target.value)}
+                  >
                     {jobs.map((job) => (
                       <option value={job.id} key={job.id}>
                         {job.name}

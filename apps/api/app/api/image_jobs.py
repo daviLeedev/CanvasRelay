@@ -1,17 +1,21 @@
+import asyncio
+from collections.abc import AsyncIterator
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
     ImageJobCreate,
     ImageJobError,
+    ImageJobListResponse,
     ImageJobResponse,
     ImageJobResult,
     ImageJobSettings,
 )
-from app.domain.image_jobs import ImageJobRecord
+from app.domain.image_jobs import ImageJobRecord, ImageJobStatus
 from app.providers.base import ImageProviderError
-from app.repositories.image_jobs import ImageJobNotFoundError
+from app.repositories.image_jobs import TERMINAL_STATUSES, ImageJobNotFoundError
 from app.services.image_jobs import ImageJobService
 
 router = APIRouter(prefix="/image-jobs", tags=["image jobs"])
@@ -92,6 +96,16 @@ async def create_image_job(
     return _to_response(record)
 
 
+@router.get("", response_model=ImageJobListResponse)
+async def list_image_jobs(
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 24,
+    job_status: Annotated[ImageJobStatus | None, Query(alias="status")] = None,
+) -> ImageJobListResponse:
+    records = await service.list_recent(limit=limit, status=job_status)
+    return ImageJobListResponse(items=[_to_response(record) for record in records])
+
+
 @router.get("/{job_id}", response_model=ImageJobResponse)
 async def get_image_job(
     job_id: str,
@@ -133,4 +147,40 @@ async def get_image_job_result(
         content=content.body,
         media_type=content.mime_type,
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/{job_id}/events", response_class=StreamingResponse)
+async def stream_image_job(
+    job_id: str,
+    client_request: Request,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> StreamingResponse:
+    try:
+        service.repository.get(job_id)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+
+    async def events() -> AsyncIterator[str]:
+        previous = ""
+        while not await client_request.is_disconnected():
+            try:
+                record = await service.get(job_id)
+            except ImageProviderError:
+                break
+            payload = _to_response(record).model_dump_json(by_alias=True)
+            if payload != previous:
+                yield f"event: job\ndata: {payload}\n\n"
+                previous = payload
+            if record.status in TERMINAL_STATUSES:
+                break
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
     )

@@ -9,6 +9,7 @@ from app.providers.base import ImageGenerationProvider
 from app.providers.comfyui import ComfyUIImageProvider
 from app.providers.demo import DemoImageProvider
 from app.repositories.image_jobs import ImageJobRepository
+from app.repositories.media import FilesystemMediaStore
 from app.services.image_jobs import ImageJobService
 
 
@@ -28,10 +29,12 @@ def create_app(
     settings: Settings | None = None,
     image_jobs: ImageJobRepository | None = None,
     image_provider: ImageGenerationProvider | None = None,
+    media_store: FilesystemMediaStore | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
-    repository = image_jobs or ImageJobRepository()
+    repository = image_jobs or ImageJobRepository(database_path=app_settings.database_path)
     provider = image_provider or build_image_provider(app_settings)
+    result_store = media_store or FilesystemMediaStore(app_settings.media_root)
     application = FastAPI(
         title="CanvasRelay API",
         version=app_settings.app_version,
@@ -39,7 +42,7 @@ def create_app(
     )
     application.state.settings = app_settings
     application.state.image_jobs = repository
-    application.state.image_job_service = ImageJobService(repository, provider)
+    application.state.image_job_service = ImageJobService(repository, provider, result_store)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.allowed_origins,

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import cast
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.providers.demo import DemoImageProvider
 from app.repositories.image_jobs import ImageJobRepository
+from app.repositories.media import FilesystemMediaStore
 
 
 class MutableClock:
@@ -20,11 +22,21 @@ class MutableClock:
         self.current += timedelta(milliseconds=milliseconds)
 
 
-def make_client(clock: MutableClock) -> TestClient:
-    repository = ImageJobRepository(clock)
+def make_client(
+    clock: MutableClock,
+    tmp_path: Path,
+    *,
+    database_path: Path | str = ":memory:",
+) -> TestClient:
+    repository = ImageJobRepository(clock, database_path)
     provider = DemoImageProvider(clock)
     return TestClient(
-        create_app(Settings(env="test"), image_jobs=repository, image_provider=provider)
+        create_app(
+            Settings(env="test"),
+            image_jobs=repository,
+            image_provider=provider,
+            media_store=FilesystemMediaStore(tmp_path / "media"),
+        )
     )
 
 
@@ -37,9 +49,9 @@ def create_job(client: TestClient, *, prompt: str = "A precise studio still") ->
     return cast(dict[str, object], response.json())
 
 
-def test_create_validates_input_and_returns_a_typed_queued_job() -> None:
+def test_create_validates_input_and_returns_a_typed_queued_job(tmp_path: Path) -> None:
     clock = MutableClock()
-    client = make_client(clock)
+    client = make_client(clock, tmp_path)
 
     invalid = client.post(
         "/api/v1/image-jobs",
@@ -60,8 +72,8 @@ def test_create_validates_input_and_returns_a_typed_queued_job() -> None:
     assert created["error"] is None
 
 
-def test_image_provider_status_is_public_and_redacted() -> None:
-    client = make_client(MutableClock())
+def test_image_provider_status_is_public_and_redacted(tmp_path: Path) -> None:
+    client = make_client(MutableClock(), tmp_path)
 
     response = client.get("/api/v1/providers/image")
 
@@ -75,9 +87,9 @@ def test_image_provider_status_is_public_and_redacted() -> None:
     }
 
 
-def test_job_moves_from_queued_to_running_to_completed_from_elapsed_time() -> None:
+def test_job_moves_from_queued_to_running_to_completed_from_elapsed_time(tmp_path: Path) -> None:
     clock = MutableClock()
-    client = make_client(clock)
+    client = make_client(clock, tmp_path)
     job_id = create_job(client)["id"]
 
     clock.advance(milliseconds=900)
@@ -94,9 +106,9 @@ def test_job_moves_from_queued_to_running_to_completed_from_elapsed_time() -> No
     assert completed["result"]["mimeType"] == "image/svg+xml"
 
 
-def test_cancel_is_terminal_and_prevents_later_completion() -> None:
+def test_cancel_is_terminal_and_prevents_later_completion(tmp_path: Path) -> None:
     clock = MutableClock()
-    client = make_client(clock)
+    client = make_client(clock, tmp_path)
     job_id = create_job(client)["id"]
 
     clock.advance(milliseconds=1000)
@@ -110,8 +122,8 @@ def test_cancel_is_terminal_and_prevents_later_completion() -> None:
     assert client.get(f"/api/v1/image-jobs/{job_id}/result").status_code == 409
 
 
-def test_unknown_job_returns_a_safe_not_found_response() -> None:
-    client = make_client(MutableClock())
+def test_unknown_job_returns_a_safe_not_found_response(tmp_path: Path) -> None:
+    client = make_client(MutableClock(), tmp_path)
 
     response = client.get("/api/v1/image-jobs/img_missing")
 
@@ -119,9 +131,9 @@ def test_unknown_job_returns_a_safe_not_found_response() -> None:
     assert response.json() == {"detail": "Image job was not found."}
 
 
-def test_result_is_deterministic_nonempty_and_escapes_the_prompt() -> None:
+def test_result_is_deterministic_nonempty_and_escapes_the_prompt(tmp_path: Path) -> None:
     clock = MutableClock()
-    client = make_client(clock)
+    client = make_client(clock, tmp_path)
     prompt = '<script>alert("demo")</script> structured portrait'
     first_id = create_job(client, prompt=prompt)["id"]
     second_id = create_job(client, prompt=prompt)["id"]
@@ -137,3 +149,81 @@ def test_result_is_deterministic_nonempty_and_escapes_the_prompt() -> None:
     assert '<script>' not in first.text
     assert "&lt;script&gt;" in first.text
     assert len(set(first.text)) > 20
+
+
+def test_recent_jobs_are_listed_newest_first(tmp_path: Path) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    first = create_job(client, prompt="First composition")
+    clock.advance(milliseconds=10)
+    second = create_job(client, prompt="Second composition")
+
+    response = client.get("/api/v1/image-jobs?limit=2")
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items] == [second["id"], first["id"]]
+
+
+def test_completed_filter_refreshes_jobs_that_finished_while_no_client_was_open(
+    tmp_path: Path,
+) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    job = create_job(client)
+    clock.advance(milliseconds=4000)
+
+    response = client.get("/api/v1/image-jobs?status=completed&limit=10")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [job["id"]]
+
+
+def test_completed_job_and_result_survive_api_restart(tmp_path: Path) -> None:
+    clock = MutableClock()
+    database_path = tmp_path / "canvasrelay.sqlite3"
+    media_store = FilesystemMediaStore(tmp_path / "media")
+    first_repository = ImageJobRepository(clock, database_path)
+    first_client = TestClient(
+        create_app(
+            Settings(env="test"),
+            image_jobs=first_repository,
+            image_provider=DemoImageProvider(clock),
+            media_store=media_store,
+        )
+    )
+    job_id = cast(str, create_job(first_client)["id"])
+    clock.advance(milliseconds=4000)
+    first_result = first_client.get(f"/api/v1/image-jobs/{job_id}/result")
+    first_repository.close()
+
+    second_repository = ImageJobRepository(clock, database_path)
+    second_client = TestClient(
+        create_app(
+            Settings(env="test"),
+            image_jobs=second_repository,
+            image_provider=DemoImageProvider(clock),
+            media_store=media_store,
+        )
+    )
+    restored = second_client.get(f"/api/v1/image-jobs/{job_id}")
+    second_result = second_client.get(f"/api/v1/image-jobs/{job_id}/result")
+
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "completed"
+    assert second_result.content == first_result.content
+    second_repository.close()
+
+
+def test_completed_job_event_stream_emits_typed_snapshot(tmp_path: Path) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    job_id = create_job(client)["id"]
+    clock.advance(milliseconds=4000)
+
+    response = client.get(f"/api/v1/image-jobs/{job_id}/events")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: job" in response.text
+    assert '"status":"completed"' in response.text

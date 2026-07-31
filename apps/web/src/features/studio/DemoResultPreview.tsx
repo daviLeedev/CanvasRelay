@@ -21,6 +21,7 @@ export function DemoResultPreview({ job, compact = false }: Readonly<{
           alt={`${demo ? "Deterministic demo" : "ComfyUI"} result for ${job.prompt}`}
           fill
           sizes={compact ? "280px" : "(max-width: 700px) 90vw, 60vw"}
+          loading="eager"
           priority={!compact}
           unoptimized
         />

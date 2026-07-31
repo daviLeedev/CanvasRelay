@@ -67,6 +67,7 @@ class ImageJobRecord:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     result: ProviderResult | None = None
+    result_path: str | None = None
     error: ProviderErrorDetails | None = None
 
 

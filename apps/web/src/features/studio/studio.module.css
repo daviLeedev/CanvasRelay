@@ -100,8 +100,114 @@
 }
 
 .generationPanel,
+.recentJobs,
 .jobInspector {
   border-bottom: 1px solid var(--border);
+}
+
+.recentJobs {
+  padding: var(--space-4);
+}
+
+.recentJobs > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.recentJobs > header span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.recentJobs > header h2 {
+  margin: 3px 0 0;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.recentJobs > header > strong {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.recentGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.recentItem {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--control);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.recentItem:hover,
+.recentItem[data-selected="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+}
+
+.recentItem[data-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.recentThumb {
+  position: relative;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  overflow: hidden;
+  background: #0b0e12;
+  color: var(--text-muted);
+}
+
+.recentThumb img {
+  object-fit: contain;
+}
+
+.recentItem > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.recentItem strong,
+.recentItem small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentItem strong {
+  color: var(--text-primary);
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.recentItem small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.recentEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .panelHeading {

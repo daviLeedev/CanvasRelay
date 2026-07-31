@@ -28,7 +28,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Image Jobs */
+        get: operations["list_image_jobs_api_v1_image_jobs_get"];
         put?: never;
         /** Create Image Job */
         post: operations["create_image_job_api_v1_image_jobs_post"];
@@ -51,6 +52,23 @@ export interface paths {
         post?: never;
         /** Cancel Image Job */
         delete: operations["cancel_image_job_api_v1_image_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Image Job */
+        get: operations["stream_image_job_api_v1_image_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -142,6 +160,11 @@ export interface components {
             message: string;
             /** Retryable */
             retryable: boolean;
+        };
+        /** ImageJobListResponse */
+        ImageJobListResponse: {
+            /** Items */
+            items: components["schemas"]["ImageJobResponse"][];
         };
         /** ImageJobResponse */
         ImageJobResponse: {
@@ -248,6 +271,38 @@ export interface operations {
             };
         };
     };
+    list_image_jobs_api_v1_image_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                status?: components["schemas"]["ImageJobStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_image_job_api_v1_image_jobs_post: {
         parameters: {
             query?: never;
@@ -331,6 +386,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImageJobResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_image_job_api_v1_image_jobs__job_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

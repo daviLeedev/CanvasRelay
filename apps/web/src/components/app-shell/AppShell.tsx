@@ -1,6 +1,7 @@
-import { Activity, ImageIcon, PanelsTopLeft } from "lucide-react";
+import { Activity } from "lucide-react";
 import Link from "next/link";
 
+import { StudioNavigation } from "./StudioNavigation";
 import styles from "./AppShell.module.css";
 
 function Brand() {
@@ -20,12 +21,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       <aside className={styles.sidebar} aria-label="Studio navigation">
         <div>
           <Brand />
-          <nav className={styles.navigation} aria-label="Primary navigation">
-            <Link className={styles.navItem} href="/image" aria-current="page">
-              <ImageIcon aria-hidden="true" size={19} />
-              <span>Image studio</span>
-            </Link>
-          </nav>
+          <StudioNavigation />
         </div>
 
         <div className={styles.sidebarStatus}>
@@ -36,12 +32,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
       <header className={styles.mobileBar}>
         <Brand />
-        <nav aria-label="Mobile navigation">
-          <Link className={styles.mobileNavItem} href="/image" aria-current="page">
-            <PanelsTopLeft aria-hidden="true" size={19} />
-            <span className={styles.visuallyHidden}>Image studio</span>
-          </Link>
-        </nav>
+        <StudioNavigation mobile />
       </header>
 
       <main className={styles.main}>{children}</main>

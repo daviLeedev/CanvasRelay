@@ -15,6 +15,8 @@ runs without credentials, models, or a GPU.
 - FastAPI and Pydantic Settings
 - OpenAPI-generated TypeScript contracts
 - Provider-neutral image jobs with Demo and optional ComfyUI adapters
+- SQLite-backed job history and a filesystem result library
+- Server-sent job updates with polling fallback
 - Pytest, Ruff, MyPy, Vitest, and Testing Library
 - pnpm workspaces and uv
 - Docker Compose demo runtime
@@ -67,6 +69,11 @@ docker compose config
 
 Copy the names from `.env.example` into your own untracked environment file or
 shell environment. Only the public API base URL is exposed to browser code.
+
+`CANVASRELAY_DATA_DIR` controls the private runtime directory that contains the
+SQLite job index and generated media. It defaults to the ignored `.canvasrelay/`
+directory. Completed results are available from the Studio history and the
+`/library` route, including after an API restart.
 
 ### Optional local ComfyUI generation
 

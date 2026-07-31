@@ -46,7 +46,14 @@
 }
 
 .navigation {
+  display: grid;
+  gap: 4px;
   margin-top: var(--space-6);
+}
+
+.mobileNavigation {
+  display: flex;
+  align-items: center;
 }
 
 .navItem,
@@ -70,6 +77,11 @@
   background: var(--control);
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.mobileNavItem[aria-current="page"] {
+  color: var(--text-primary);
+  background: var(--control);
 }
 
 .navItem svg,

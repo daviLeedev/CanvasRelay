@@ -42,6 +42,10 @@ class DemoImageProvider:
             self._jobs[request.job_id] = request
         return request.job_id
 
+    def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None:
+        with self._lock:
+            self._jobs.setdefault(provider_job_id, request)
+
     async def poll(self, provider_job_id: str) -> ProviderSnapshot:
         request = self._get(provider_job_id)
         with self._lock:

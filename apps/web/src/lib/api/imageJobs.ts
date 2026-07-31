@@ -4,6 +4,7 @@ import { getApiBaseUrl } from "@/lib/env";
 
 export type ImageJobCreate = components["schemas"]["ImageJobCreate"];
 export type ImageJobResponse = components["schemas"]["ImageJobResponse"];
+export type ImageJobListResponse = components["schemas"]["ImageJobListResponse"];
 
 const jobStatuses = new Set<ImageJobResponse["status"]>([
   "queued",
@@ -30,7 +31,7 @@ function isNullableString(value: unknown): value is string | null {
   return typeof value === "string" || value === null;
 }
 
-function parseImageJob(value: unknown): ImageJobResponse {
+export function parseImageJob(value: unknown): ImageJobResponse {
   if (!isRecord(value) || !isRecord(value.settings)) {
     throw new Error("Invalid image job response.");
   }
@@ -80,6 +81,13 @@ function parseImageJob(value: unknown): ImageJobResponse {
   return value as ImageJobResponse;
 }
 
+function parseImageJobList(value: unknown): ImageJobListResponse {
+  if (!isRecord(value) || !Array.isArray(value.items)) {
+    throw new Error("Invalid image job list response.");
+  }
+  return { items: value.items.map(parseImageJob) };
+}
+
 async function requestImageJob(path: string, init?: RequestInit): Promise<ImageJobResponse> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
@@ -109,6 +117,45 @@ export function createImageJob(input: ImageJobCreate): Promise<ImageJobResponse>
 
 export function fetchImageJob(jobId: string, signal?: AbortSignal): Promise<ImageJobResponse> {
   return requestImageJob(`/api/v1/image-jobs/${encodeURIComponent(jobId)}`, { signal });
+}
+
+export async function fetchImageJobs(limit = 24, status?: ImageJobResponse["status"]): Promise<ImageJobResponse[]> {
+  const search = new URLSearchParams({ limit: String(limit) });
+  if (status) search.set("status", status);
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/image-jobs?${search.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("The image library could not be loaded.");
+  try {
+    return parseImageJobList(await response.json()).items;
+  } catch {
+    throw new Error("The image library returned an invalid response.");
+  }
+}
+
+export function subscribeImageJob(
+  jobId: string,
+  onJob: (job: ImageJobResponse) => void,
+  onDisconnect: () => void,
+  onOpen: () => void = () => undefined,
+): () => void {
+  const source = new EventSource(
+    `${getApiBaseUrl()}/api/v1/image-jobs/${encodeURIComponent(jobId)}/events`,
+  );
+  source.addEventListener("job", (event) => {
+    try {
+      onJob(parseImageJob(JSON.parse(event.data) as unknown));
+    } catch {
+      onDisconnect();
+      source.close();
+    }
+  });
+  source.onerror = () => {
+    onDisconnect();
+    source.close();
+  };
+  source.onopen = onOpen;
+  return () => source.close();
 }
 
 export function cancelImageJob(jobId: string): Promise<ImageJobResponse> {

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     comfyui_output_node_id: str | None = None
     comfyui_timeout_seconds: float = 30
     comfyui_max_result_bytes: int = 50 * 1024 * 1024
+    data_dir: Path = Path(".canvasrelay")
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     app_version: str = "0.1.0"
 
@@ -43,6 +44,21 @@ class Settings(BaseSettings):
             return path
         repository_root = Path(__file__).resolve().parents[4]
         return repository_root / path
+
+    @property
+    def resolved_data_dir(self) -> Path:
+        if self.data_dir.is_absolute():
+            return self.data_dir
+        repository_root = Path(__file__).resolve().parents[4]
+        return repository_root / self.data_dir
+
+    @property
+    def database_path(self) -> Path:
+        return self.resolved_data_dir / "canvasrelay.sqlite3"
+
+    @property
+    def media_root(self) -> Path:
+        return self.resolved_data_dir / "media" / "images"
 
 
 @lru_cache

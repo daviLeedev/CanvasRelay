@@ -44,6 +44,13 @@ function response(body: ImageJobResponse, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function emptyListResponse() {
+  return new Response(JSON.stringify({ items: [] }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function QueryWrapper({ children }: Readonly<{ children: ReactNode }>) {
@@ -56,7 +63,8 @@ describe("useImageGenerationJob", () => {
     let getCount = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("image-jobs?")) return emptyListResponse();
         if (init?.method === "POST") return response(queued, 201);
         getCount += 1;
         return response(getCount === 1 ? running : completed);
@@ -76,7 +84,8 @@ describe("useImageGenerationJob", () => {
   it("cancels the active server job", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("image-jobs?")) return emptyListResponse();
         if (init?.method === "POST") return response(queued, 201);
         if (init?.method === "DELETE") return response({ ...running, status: "canceled", progress: 0 });
         return response(running);
@@ -99,7 +108,8 @@ describe("useImageGenerationJob", () => {
     let postCount = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("image-jobs?")) return emptyListResponse();
         if (init?.method === "POST") {
           postCount += 1;
           return postCount === 1 ? new Response("private failure", { status: 503 }) : response(queued, 201);
