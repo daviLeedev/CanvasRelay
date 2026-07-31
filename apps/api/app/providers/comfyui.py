@@ -13,6 +13,7 @@ import httpx
 
 from app.domain.image_jobs import (
     ImageGenerationRequest,
+    ImageJobStatus,
     ImageMimeType,
     ImageProviderName,
     ProviderContent,
@@ -32,10 +33,12 @@ PLACEHOLDERS = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _TrackedComfyJob:
     request: ImageGenerationRequest
     submitted_at: datetime
+    last_status: ImageJobStatus = "queued"
+    missing_polls: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +121,7 @@ class ComfyUIImageProvider:
             if isinstance(entry, Mapping):
                 snapshot = self._snapshot_from_history(provider_job_id, tracked.request, entry)
                 if snapshot is not None:
-                    return snapshot
+                    return self._remember_snapshot(provider_job_id, snapshot)
 
             queue_response = await self._request("GET", "/queue")
             queue = queue_response.json()
@@ -127,9 +130,19 @@ class ComfyUIImageProvider:
 
         if isinstance(queue, Mapping):
             if self._queue_contains(queue.get("queue_pending"), provider_job_id):
-                return ProviderSnapshot("queued", 0)
+                return self._remember_snapshot(
+                    provider_job_id,
+                    ProviderSnapshot("queued", 0),
+                )
             if self._queue_contains(queue.get("queue_running"), provider_job_id):
-                return ProviderSnapshot("running", None)
+                return self._remember_snapshot(
+                    provider_job_id,
+                    ProviderSnapshot("running", None),
+                )
+
+        grace_snapshot = self._snapshot_during_history_transition(provider_job_id)
+        if grace_snapshot is not None:
+            return grace_snapshot
 
         return ProviderSnapshot(
             "failed",
@@ -141,6 +154,36 @@ class ComfyUIImageProvider:
                 True,
             ),
         )
+
+    def _remember_snapshot(
+        self,
+        provider_job_id: str,
+        snapshot: ProviderSnapshot,
+    ) -> ProviderSnapshot:
+        with self._lock:
+            tracked = self._jobs.get(provider_job_id)
+            if tracked is not None:
+                tracked.last_status = snapshot.status
+                tracked.missing_polls = 0
+        return snapshot
+
+    def _snapshot_during_history_transition(
+        self,
+        provider_job_id: str,
+    ) -> ProviderSnapshot | None:
+        with self._lock:
+            tracked = self._jobs.get(provider_job_id)
+            if tracked is None:
+                return None
+            tracked.missing_polls += 1
+            if tracked.missing_polls > 5:
+                return None
+            status: ImageJobStatus = (
+                tracked.last_status
+                if tracked.last_status in {"queued", "running"}
+                else "running"
+            )
+        return ProviderSnapshot(status, 0 if status == "queued" else None)
 
     async def cancel(self, provider_job_id: str) -> ProviderSnapshot:
         self._get_tracked(provider_job_id)

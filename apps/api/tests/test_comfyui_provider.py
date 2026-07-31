@@ -136,6 +136,61 @@ async def test_comfyui_reports_queue_without_inventing_running_progress(tmp_path
 
 
 @pytest.mark.anyio
+async def test_comfyui_tolerates_queue_to_history_transition(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    write_workflow(workflow_path)
+    phase = "running"
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        nonlocal phase
+        if http_request.url.path == "/prompt":
+            return httpx.Response(200, json={"prompt_id": "provider_transition"})
+        if http_request.url.path == "/history/provider_transition":
+            if phase != "completed":
+                return httpx.Response(200, json={})
+            return httpx.Response(
+                200,
+                json={
+                    "provider_transition": {
+                        "status": {"status_str": "success", "completed": True},
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "result.png", "subfolder": "", "type": "output"}
+                                ]
+                            }
+                        },
+                    }
+                },
+            )
+        if http_request.url.path == "/queue":
+            if phase == "running":
+                return httpx.Response(
+                    200,
+                    json={"queue_running": [[1, "provider_transition", {}, {}, []]]},
+                )
+            return httpx.Response(200, json={"queue_running": [], "queue_pending": []})
+        raise AssertionError(f"Unexpected request: {http_request.method} {http_request.url.path}")
+
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        transport=httpx.MockTransport(handler),
+    )
+    provider_id = await provider.submit(request())
+
+    running = await provider.poll(provider_id)
+    phase = "transition"
+    transitioning = await provider.poll(provider_id)
+    phase = "completed"
+    completed = await provider.poll(provider_id)
+
+    assert running.status == "running"
+    assert transitioning.status == "running" and transitioning.error is None
+    assert completed.status == "completed"
+
+
+@pytest.mark.anyio
 async def test_comfyui_normalizes_execution_errors(tmp_path: Path) -> None:
     workflow_path = tmp_path / "workflow.json"
     write_workflow(workflow_path)
