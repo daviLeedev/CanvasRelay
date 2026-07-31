@@ -172,7 +172,7 @@ export function ImageEditPanel({
         />
         <ImageInput
           label="Identity reference"
-          hint="Optional second edit reference; no face-swap pass"
+          hint="Optional second edit reference"
           file={faceReference}
           onChange={setFaceReference}
         />
