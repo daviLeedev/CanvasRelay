@@ -7,3 +7,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@types/react-dom@19.2.4'
   - '@types/react@19.2.18'
+  - '@playwright/test@1.62.1'
+  - playwright-core@1.62.1
+  - playwright@1.62.1

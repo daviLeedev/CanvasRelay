@@ -19,6 +19,7 @@
     "test": "pnpm test:web && pnpm test:api",
     "test:web": "pnpm --filter @canvasrelay/web test",
     "test:api": "uv run --directory apps/api pytest",
+    "test:e2e": "pnpm --filter @canvasrelay/web test:e2e",
     "build": "pnpm --filter @canvasrelay/web build",
     "contracts:export": "uv run --directory apps/api python -m app.openapi --output ../../packages/contracts/openapi.json",
     "contracts:types": "openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",

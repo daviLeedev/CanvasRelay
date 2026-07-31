@@ -1,19 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw, Server, TriangleAlert } from "lucide-react";
+import { RefreshCw, Server } from "lucide-react";
 
-import { fetchHealth } from "@/lib/api/health";
+import { IconButton } from "@/components/ui/IconButton";
+import { StatusIndicator } from "@/components/ui/StatusIndicator";
+import { useHealthQuery } from "@/lib/api/useHealthQuery";
 
 import styles from "./HealthPanel.module.css";
 
 export function HealthPanel() {
-  const healthQuery = useQuery({
-    queryKey: ["health"],
-    queryFn: ({ signal }) => fetchHealth(signal),
-    staleTime: 30_000,
-  });
-
+  const healthQuery = useHealthQuery();
   const isChecking = healthQuery.isPending || healthQuery.isFetching;
 
   return (
@@ -21,52 +17,40 @@ export function HealthPanel() {
       <header className={styles.header}>
         <div className={styles.titleGroup}>
           <Server aria-hidden="true" size={18} />
-          <h2 id="health-title">API status</h2>
+          <h2 id="health-title">API details</h2>
         </div>
 
-        <button
-          className={styles.retryButton}
-          type="button"
+        <IconButton
+          label="Check API connection again"
           onClick={() => void healthQuery.refetch()}
           disabled={isChecking}
-          aria-label="Check API connection again"
-          title="Check again"
         >
           <RefreshCw aria-hidden="true" size={16} />
-        </button>
+        </IconButton>
       </header>
 
-      <div className={styles.status} role="status" aria-live="polite">
+      <div className={styles.status} aria-live="polite">
         {isChecking ? (
-          <>
-            <span className={`${styles.indicator} ${styles.checking}`} aria-hidden="true" />
-            <div>
-              <strong>Checking connection</strong>
-              <p>Waiting for the API health response.</p>
-            </div>
-          </>
+          <div>
+            <StatusIndicator label="Checking connection" tone="warning" />
+            <p>Waiting for the local API health response.</p>
+          </div>
         ) : null}
 
         {healthQuery.isSuccess && !isChecking ? (
-          <>
-            <CheckCircle2 className={styles.connectedIcon} aria-hidden="true" size={18} />
-            <div>
-              <strong>Connected</strong>
-              <p>
-                {healthQuery.data.service} - v{healthQuery.data.version}
-              </p>
-            </div>
-          </>
+          <div>
+            <StatusIndicator label="Connected" tone="success" />
+            <p>
+              {healthQuery.data.service} - v{healthQuery.data.version}
+            </p>
+          </div>
         ) : null}
 
         {healthQuery.isError && !isChecking ? (
-          <>
-            <TriangleAlert className={styles.errorIcon} aria-hidden="true" size={18} />
-            <div>
-              <strong>API unavailable</strong>
-              <p>Start the API server, then check the connection again.</p>
-            </div>
-          </>
+          <div>
+            <StatusIndicator label="API unavailable" tone="danger" />
+            <p>Start the local API service, then check the connection again.</p>
+          </div>
         ) : null}
       </div>
 

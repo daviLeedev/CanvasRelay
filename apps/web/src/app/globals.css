@@ -1,25 +1,29 @@
 :root {
   color-scheme: dark;
-  --canvas: #0a0c0f;
+  --canvas: #090b0e;
   --surface: #101318;
   --surface-raised: #171c22;
+  --surface-elevated: #20262e;
   --control: #1d232b;
+  --control-hover: #252d36;
   --border: #303945;
-  --border-strong: #485463;
+  --border-strong: #4a5665;
   --text-primary: #f4f7fb;
-  --text-secondary: #b3bec9;
+  --text-secondary: #b6c0ca;
   --text-muted: #8793a1;
-  --accent: #5b8cff;
-  --success: #3ccb91;
-  --warning: #f1b84b;
-  --danger: #ff6b72;
-  --focus-ring: #8eb0ff;
+  --accent: #6f9cff;
+  --accent-strong: #9bb8ff;
+  --success: #48c992;
+  --warning: #efb74e;
+  --danger: #ff7179;
+  --focus-ring: #9bb8ff;
   --radius-sm: 6px;
   --radius-md: 8px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
 }
@@ -35,6 +39,7 @@ body {
 }
 
 body {
+  overflow-x: hidden;
   background: var(--canvas);
   color: var(--text-primary);
   font-family:
@@ -52,12 +57,31 @@ select {
   letter-spacing: 0;
 }
 
+button,
+select {
+  color: inherit;
+}
+
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-button {
-  color: inherit;
+::selection {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

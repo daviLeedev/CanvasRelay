@@ -1,16 +1,13 @@
 .panel {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  border-top: 1px solid var(--border);
 }
 
 .header {
   display: flex;
+  min-height: 50px;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
   padding: 0 var(--space-3) 0 var(--space-4);
-  border-bottom: 1px solid var(--border);
 }
 
 .titleGroup {
@@ -25,73 +22,20 @@
 
 .titleGroup h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.retryButton {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  cursor: pointer;
-}
-
-.retryButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--control);
-}
-
-.retryButton:disabled {
-  color: var(--text-muted);
-  cursor: wait;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .status {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: var(--space-3);
-  min-height: 96px;
-  padding: var(--space-4);
-  align-content: center;
-}
-
-.status strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
+  min-height: 84px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
 .status p {
-  margin: var(--space-1) 0 0;
-  color: var(--text-secondary);
+  margin: var(--space-2) 0 0 15px;
+  color: var(--text-muted);
   font-size: 12px;
-  line-height: 1.5;
-}
-
-.indicator {
-  display: block;
-  width: 10px;
-  height: 10px;
-  margin: 4px;
-  border: 2px solid var(--warning);
-  border-radius: 50%;
-}
-
-.checking {
-  border-right-color: transparent;
-}
-
-.connectedIcon {
-  color: var(--success);
-}
-
-.errorIcon {
-  color: var(--danger);
+  line-height: 1.45;
 }
 
 .details {
@@ -112,19 +56,11 @@
 .details dt {
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 500;
 }
 
 .details dd {
   margin: var(--space-1) 0 0;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   text-transform: capitalize;
-}
-
-@media (max-width: 640px) {
-  .retryButton {
-    width: 44px;
-    height: 44px;
-  }
 }

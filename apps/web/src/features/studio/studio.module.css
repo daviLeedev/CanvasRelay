@@ -1,0 +1,580 @@
+.workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.localToolbar {
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(300px, 1fr) auto;
+  min-height: 68px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workspaceTitle span,
+.inspectorHeader span,
+.progressBlock span,
+.relayHeader span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspaceTitle h1,
+.inspectorHeader h2 {
+  margin: 3px 0 0;
+  letter-spacing: 0;
+}
+
+.workspaceTitle h1 {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.toolbarStatus,
+.toolbarActions,
+.summary {
+  display: flex;
+  align-items: center;
+}
+
+.toolbarStatus {
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.summary {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--border);
+}
+
+.summary span {
+  padding: 6px 9px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.toolbarActions {
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: #090c10;
+}
+
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+}
+
+.jobInspector {
+  min-width: 0;
+}
+
+.inspectorHeader {
+  display: flex;
+  min-height: 74px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.inspectorHeader h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.inspectorBody {
+  display: grid;
+  gap: var(--space-5);
+  padding: 0 var(--space-4) var(--space-5);
+}
+
+.progressBlock {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.progressBlock > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progressBlock strong {
+  font-size: 12px;
+}
+
+.inspectorProgress,
+.progressTrack {
+  display: block;
+  overflow: hidden;
+  height: 4px;
+  border-radius: 2px;
+  background: #2b3440;
+}
+
+.inspectorProgress > span,
+.progressTrack > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 220ms linear;
+}
+
+.jobDetails {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  background: var(--border);
+}
+
+.jobDetails div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 9px 0;
+  background: var(--surface);
+}
+
+.jobDetails dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.jobDetails dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.stage2d {
+  display: grid;
+  grid-template-rows: auto auto minmax(300px, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-5);
+  background:
+    linear-gradient(#151a20 1px, transparent 1px),
+    linear-gradient(90deg, #151a20 1px, transparent 1px),
+    #090c10;
+  background-size: 28px 28px;
+}
+
+.relayHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-bottom: var(--space-3);
+}
+
+.relayHeader span:nth-child(2) {
+  text-align: center;
+}
+
+.relayHeader span:last-child {
+  text-align: right;
+}
+
+.jobLane {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.jobCard {
+  display: grid;
+  min-width: 0;
+  min-height: 126px;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.jobCard:hover,
+.jobCard[data-selected="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+}
+
+.jobCard[data-selected="true"] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.jobCardTopline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.jobCard[data-status="running"] .jobCardTopline svg {
+  color: var(--accent);
+}
+
+.jobCard[data-status="completed"] .jobCardTopline svg {
+  color: var(--success);
+}
+
+.jobCard[data-status="queued"] .jobCardTopline svg {
+  color: var(--warning);
+}
+
+.jobName {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobPhase {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.relaySurface {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) minmax(80px, 1fr) 86px;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 920px);
+  min-height: 280px;
+  margin: 0 auto;
+}
+
+.mediaPlane {
+  display: grid;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  background: #151c24;
+  box-shadow: inset 0 0 0 12px #10151b;
+}
+
+.mediaPlane span {
+  grid-area: 1 / 1;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.mediaPlane span:last-child {
+  margin-top: 28px;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+
+.relayLine {
+  display: block;
+  height: 2px;
+  background: var(--success);
+}
+
+.outputSlot {
+  display: grid;
+  height: 134px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  background: #202930;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  writing-mode: vertical-rl;
+}
+
+.stage3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 430px;
+}
+
+.stage3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: manipulation;
+}
+
+.sceneLabels {
+  position: absolute;
+  inset: var(--space-4) var(--space-5) auto;
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 0.8fr;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+.sceneLabels span:nth-child(2) {
+  text-align: center;
+}
+
+.sceneLabels span:last-child {
+  text-align: right;
+}
+
+.sceneJobLabels {
+  position: absolute;
+  top: 50%;
+  left: var(--space-4);
+  display: grid;
+  width: clamp(150px, 20vw, 214px);
+  gap: var(--space-3);
+  transform: translateY(-50%);
+}
+
+.sceneJobLabels button {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #10151b 76%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sceneJobLabels button[data-active="true"] {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, #202a35 90%, transparent);
+  color: var(--text-primary);
+}
+
+.sceneJobLabels button span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneJobLabels button strong {
+  font-size: 10px;
+}
+
+.stageLoading {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 430px;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.webglFallback {
+  height: 100%;
+  overflow: auto;
+}
+
+.webglFallback > section {
+  min-height: 230px;
+  border-bottom: 1px solid var(--border);
+}
+
+.webglFallback .stage2d {
+  min-height: 520px;
+}
+
+@media (max-width: 1180px) {
+  .localToolbar {
+    grid-template-columns: minmax(140px, 0.65fr) minmax(250px, 1fr) auto;
+    gap: var(--space-3);
+  }
+
+  .summary span {
+    padding-inline: 7px;
+  }
+
+  .toolbarActions > button {
+    width: 38px;
+    padding: 0;
+    font-size: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .localToolbar {
+    grid-template-columns: minmax(120px, 0.55fr) minmax(250px, 1fr) auto;
+    min-height: 72px;
+    gap: var(--space-2);
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(560px, 64vh) auto;
+  }
+
+  .stage {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inspector {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    overflow: visible;
+  }
+
+  .inspector > section + section {
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 700px) {
+  .localToolbar {
+    position: sticky;
+    top: 48px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 68px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .workspaceTitle span {
+    display: none;
+  }
+
+  .workspaceTitle h1 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .toolbarActions {
+    gap: 4px;
+  }
+
+  .toolbarStatus {
+    display: none;
+  }
+
+  .toolbarActions > button {
+    display: none;
+  }
+
+  .contentGrid {
+    grid-template-rows: auto auto;
+  }
+
+  .stage {
+    min-height: 520px;
+  }
+
+  .stage2d {
+    grid-template-rows: auto auto minmax(220px, 1fr);
+    min-height: 520px;
+    padding: var(--space-3);
+  }
+
+  .jobLane {
+    grid-template-columns: 1fr;
+  }
+
+  .jobCard {
+    min-height: 98px;
+  }
+
+  .relaySurface {
+    grid-template-columns: minmax(150px, 1fr) 44px 52px;
+    min-height: 220px;
+  }
+
+  .outputSlot {
+    height: 100px;
+  }
+
+  .stage3d,
+  .stageLoading {
+    height: 520px;
+    min-height: 520px;
+  }
+
+  .sceneLabels {
+    inset-inline: var(--space-3);
+  }
+
+  .sceneJobLabels {
+    top: auto;
+    right: var(--space-3);
+    bottom: var(--space-3);
+    left: var(--space-3);
+    width: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    transform: none;
+  }
+
+  .sceneJobLabels button {
+    display: grid;
+    min-height: 48px;
+    justify-content: stretch;
+    padding: 6px 8px;
+    text-align: left;
+  }
+
+  .inspector {
+    display: block;
+  }
+
+  .inspector > section + section {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}

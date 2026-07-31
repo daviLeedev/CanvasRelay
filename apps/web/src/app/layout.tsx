@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CanvasRelay",
-  description: "Local-first AI media orchestration studio foundation.",
+  description: "A local-first studio shell for visible AI media workflows.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
