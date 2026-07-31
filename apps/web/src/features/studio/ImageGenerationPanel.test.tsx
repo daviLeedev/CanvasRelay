@@ -1,0 +1,101 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import type { ImageJobResponse } from "@/lib/api/imageJobs";
+
+import { ImageGenerationPanel } from "./ImageGenerationPanel";
+
+const baseProps = {
+  job: null,
+  isBusy: false,
+  isSubmitting: false,
+  isCanceling: false,
+  hasError: false,
+  canRetry: false,
+  onSubmit: vi.fn(async () => undefined),
+  onCancel: vi.fn(async () => undefined),
+  onRetry: vi.fn(async () => undefined),
+};
+
+const completedJob: ImageJobResponse = {
+  id: "img_complete",
+  status: "completed",
+  progress: 100,
+  prompt: "A structured studio still",
+  settings: { aspectRatio: "4:3", style: "editorial", seed: 42 },
+  createdAt: "2026-08-01T00:00:00Z",
+  startedAt: "2026-08-01T00:00:01Z",
+  completedAt: "2026-08-01T00:00:04Z",
+  result: {
+    url: "/api/v1/image-jobs/img_complete/result",
+    mimeType: "image/svg+xml",
+    width: 1152,
+    height: 864,
+  },
+  error: null,
+};
+
+describe("ImageGenerationPanel", () => {
+  it("submits prompt and generation settings", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+    render(<ImageGenerationPanel {...baseProps} onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText("Prompt"), "A modular drafting desk");
+    await user.selectOptions(screen.getByLabelText("Aspect ratio"), "3:4");
+    await user.selectOptions(screen.getByLabelText("Style"), "product");
+    await user.type(screen.getByLabelText("Seed (optional)"), "81");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      prompt: "A modular drafting desk",
+      aspectRatio: "3:4",
+      style: "product",
+      seed: 81,
+    });
+  });
+
+  it("prevents duplicate submission while a job is active", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+    render(<ImageGenerationPanel {...baseProps} isBusy onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText("Prompt"), "A complete prompt");
+    const button = screen.getByRole("button", { name: "Generate" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("cancels an active job and renders a completed demo image", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn(async () => undefined);
+    const { rerender } = render(
+      <ImageGenerationPanel
+        {...baseProps}
+        job={{ ...completedJob, status: "running", progress: 54, result: null, completedAt: null }}
+        isBusy
+        onCancel={onCancel}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+
+    rerender(<ImageGenerationPanel {...baseProps} job={completedJob} />);
+    expect(screen.getByAltText(/Deterministic demo result/iu)).toBeInTheDocument();
+    expect(screen.getByText("Demo result")).toBeInTheDocument();
+  });
+
+  it("offers a safe retry without exposing raw exceptions", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn(async () => undefined);
+    render(<ImageGenerationPanel {...baseProps} hasError canRetry onRetry={onRetry} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("The demo service could not finish the request");
+    expect(screen.queryByText(/stack|internal URL|traceback/iu)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+});

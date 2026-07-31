@@ -1,5 +1,6 @@
-import { Check, Clock3, LoaderCircle } from "lucide-react";
+import { Ban, Check, Clock3, LoaderCircle } from "lucide-react";
 
+import { DemoResultPreview } from "./DemoResultPreview";
 import type { DemoJob } from "./types";
 import styles from "./studio.module.css";
 
@@ -7,6 +8,7 @@ const statusIcon = {
   queued: Clock3,
   running: LoaderCircle,
   completed: Check,
+  canceled: Ban,
 } as const;
 
 export function StudioStage2D({
@@ -14,6 +16,8 @@ export function StudioStage2D({
   selectedId,
   onSelect,
 }: Readonly<{ jobs: DemoJob[]; selectedId: string; onSelect: (id: string) => void }>) {
+  const selectedJob = jobs.find((job) => job.id === selectedId);
+
   return (
     <div className={styles.stage2d} data-testid="stage-2d">
       <div className={styles.relayHeader}>
@@ -50,13 +54,21 @@ export function StudioStage2D({
         })}
       </div>
 
-      <div className={styles.relaySurface} aria-hidden="true">
+      <div className={styles.relaySurface}>
         <div className={styles.mediaPlane}>
-          <span>MEDIA</span>
-          <span>PROCESSING PLANE</span>
+          {selectedJob?.imageJob?.status === "completed" ? (
+            <DemoResultPreview job={selectedJob.imageJob} />
+          ) : (
+            <div className={styles.processingLabel} aria-hidden="true">
+              <span>MEDIA</span>
+              <span>PROCESSING PLANE</span>
+            </div>
+          )}
         </div>
         <span className={styles.relayLine} />
-        <div className={styles.outputSlot}>OUTPUT 01</div>
+        <div className={styles.outputSlot} aria-hidden="true">
+          OUTPUT 01
+        </div>
       </div>
     </div>
   );

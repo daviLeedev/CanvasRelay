@@ -1,6 +1,28 @@
 {
   "components": {
     "schemas": {
+      "AspectRatio": {
+        "enum": [
+          "1:1",
+          "4:3",
+          "3:4",
+          "16:9"
+        ],
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "demoMode": {
@@ -36,6 +58,264 @@
         ],
         "title": "HealthResponse",
         "type": "object"
+      },
+      "ImageJobCreate": {
+        "properties": {
+          "aspectRatio": {
+            "$ref": "#/components/schemas/AspectRatio"
+          },
+          "prompt": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ImageStyle"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspectRatio",
+          "style"
+        ],
+        "title": "ImageJobCreate",
+        "type": "object"
+      },
+      "ImageJobError": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "action",
+          "retryable"
+        ],
+        "title": "ImageJobError",
+        "type": "object"
+      },
+      "ImageJobResponse": {
+        "properties": {
+          "completedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completedat"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageJobError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "progress": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageJobResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ImageJobSettings"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startedat"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ImageJobStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "progress",
+          "prompt",
+          "settings",
+          "createdAt",
+          "startedAt",
+          "completedAt",
+          "result",
+          "error"
+        ],
+        "title": "ImageJobResponse",
+        "type": "object"
+      },
+      "ImageJobResult": {
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "mimeType": {
+            "const": "image/svg+xml",
+            "title": "Mimetype",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "url",
+          "mimeType",
+          "width",
+          "height"
+        ],
+        "title": "ImageJobResult",
+        "type": "object"
+      },
+      "ImageJobSettings": {
+        "properties": {
+          "aspectRatio": {
+            "$ref": "#/components/schemas/AspectRatio"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ImageStyle"
+          }
+        },
+        "required": [
+          "aspectRatio",
+          "style",
+          "seed"
+        ],
+        "title": "ImageJobSettings",
+        "type": "object"
+      },
+      "ImageJobStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "completed",
+          "canceled"
+        ],
+        "type": "string"
+      },
+      "ImageStyle": {
+        "enum": [
+          "editorial",
+          "product",
+          "concept"
+        ],
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     }
   },
@@ -64,6 +344,164 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/image-jobs": {
+      "post": {
+        "operationId": "create_image_job_api_v1_image_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}": {
+      "delete": {
+        "operationId": "cancel_image_job_api_v1_image_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      },
+      "get": {
+        "operationId": "get_image_job_api_v1_image_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}/result": {
+      "get": {
+        "operationId": "get_image_job_result_api_v1_image_jobs__job_id__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job Result",
+        "tags": [
+          "image jobs"
         ]
       }
     }

@@ -21,10 +21,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/image-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Image Job */
+        post: operations["create_image_job_api_v1_image_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Job */
+        get: operations["get_image_job_api_v1_image_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        /** Cancel Image Job */
+        delete: operations["cancel_image_job_api_v1_image_jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Job Result */
+        get: operations["get_image_job_result_api_v1_image_jobs__job_id__result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        AspectRatio: "1:1" | "4:3" | "3:4" | "16:9";
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthResponse */
         HealthResponse: {
             /** Demomode */
@@ -46,6 +105,86 @@ export interface components {
             timestamp: string;
             /** Version */
             version: string;
+        };
+        /** ImageJobCreate */
+        ImageJobCreate: {
+            aspectRatio: components["schemas"]["AspectRatio"];
+            /** Prompt */
+            prompt: string;
+            /** Seed */
+            seed?: number | null;
+            style: components["schemas"]["ImageStyle"];
+        };
+        /** ImageJobError */
+        ImageJobError: {
+            /** Action */
+            action: string;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Retryable */
+            retryable: boolean;
+        };
+        /** ImageJobResponse */
+        ImageJobResponse: {
+            /** Completedat */
+            completedAt: string | null;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            error: components["schemas"]["ImageJobError"] | null;
+            /** Id */
+            id: string;
+            /** Progress */
+            progress: number;
+            /** Prompt */
+            prompt: string;
+            result: components["schemas"]["ImageJobResult"] | null;
+            settings: components["schemas"]["ImageJobSettings"];
+            /** Startedat */
+            startedAt: string | null;
+            status: components["schemas"]["ImageJobStatus"];
+        };
+        /** ImageJobResult */
+        ImageJobResult: {
+            /** Height */
+            height: number;
+            /**
+             * Mimetype
+             * @constant
+             */
+            mimeType: "image/svg+xml";
+            /** Url */
+            url: string;
+            /** Width */
+            width: number;
+        };
+        /** ImageJobSettings */
+        ImageJobSettings: {
+            aspectRatio: components["schemas"]["AspectRatio"];
+            /** Seed */
+            seed: number;
+            style: components["schemas"]["ImageStyle"];
+        };
+        /** @enum {string} */
+        ImageJobStatus: "queued" | "running" | "completed" | "canceled";
+        /** @enum {string} */
+        ImageStyle: "editorial" | "product" | "concept";
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
     };
     responses: never;
@@ -72,6 +211,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    create_image_job_api_v1_image_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageJobCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_job_api_v1_image_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_image_job_api_v1_image_jobs__job_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_job_result_api_v1_image_jobs__job_id__result_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

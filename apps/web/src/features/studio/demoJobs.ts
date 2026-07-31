@@ -43,6 +43,27 @@ export function createDemoJobs(elapsedMs: number, epochMs: number): DemoJob[] {
       status,
       progress: getProgress(ageMs, status),
       startedAt: status === "queued" ? null : new Date(epochMs - startedOffset),
+      source: "sample",
     };
   });
+}
+
+export function projectImageJob(job: import("@/lib/api/imageJobs").ImageJobResponse): DemoJob {
+  const phase = {
+    queued: "Waiting for API slot",
+    running: "Rendering demo image",
+    completed: "Demo result ready",
+    canceled: "Canceled by user",
+  }[job.status];
+
+  return {
+    id: job.id,
+    name: "Image generation",
+    phase,
+    status: job.status,
+    progress: job.progress,
+    startedAt: job.startedAt ? new Date(job.startedAt) : null,
+    source: "image",
+    imageJob: job,
+  };
 }

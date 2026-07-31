@@ -14,8 +14,11 @@ import { useHealthQuery } from "@/lib/api/useHealthQuery";
 import { StudioStage2D } from "./StudioStage2D";
 import { ThreeStageBoundary } from "./ThreeStageBoundary";
 import type { DisplayMode, JobStatus } from "./types";
+import { ImageGenerationPanel } from "./ImageGenerationPanel";
+import { projectImageJob } from "./demoJobs";
 import { useDemoJobs } from "./useDemoJobs";
 import { useDisplayPreference } from "./useDisplayPreference";
+import { useImageGenerationJob } from "./useImageGenerationJob";
 import { usePageVisibility } from "./usePageVisibility";
 import { useReducedMotion } from "./useReducedMotion";
 import styles from "./studio.module.css";
@@ -33,6 +36,7 @@ const statusTone: Record<JobStatus, "success" | "warning" | "neutral"> = {
   queued: "warning",
   running: "neutral",
   completed: "success",
+  canceled: "neutral",
 };
 
 function formatStartedAt(startedAt: Date | null) {
@@ -52,11 +56,28 @@ function ApiToolbarStatus() {
 }
 
 export function StudioWorkspace() {
-  const { jobs, restart } = useDemoJobs();
+  const { jobs: sampleJobs, restart } = useDemoJobs();
+  const imageGeneration = useImageGenerationJob();
   const { mode, setMode } = useDisplayPreference();
   const reducedMotion = useReducedMotion();
   const pageVisible = usePageVisibility();
-  const [selectedId, setSelectedId] = useState(jobs[1]?.id ?? jobs[0]?.id ?? "");
+  const jobs = useMemo(
+    () =>
+      imageGeneration.job
+        ? [projectImageJob(imageGeneration.job), ...sampleJobs.slice(0, 2)]
+        : sampleJobs,
+    [imageGeneration.job, sampleJobs],
+  );
+  const [selectedId, setSelectedId] = useState(sampleJobs[1]?.id ?? sampleJobs[0]?.id ?? "");
+  async function submitImageJob(input: Parameters<typeof imageGeneration.submit>[0]) {
+    const job = await imageGeneration.submit(input);
+    if (job) setSelectedId(job.id);
+  }
+
+  async function retryImageJob() {
+    const job = await imageGeneration.retry();
+    if (job) setSelectedId(job.id);
+  }
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedId) ?? jobs[0],
@@ -127,58 +148,95 @@ export function StudioWorkspace() {
         </section>
 
         <aside className={styles.inspector} aria-label="Job and API inspector">
-          <section className={styles.jobInspector} aria-labelledby="job-inspector-title">
-            <header className={styles.inspectorHeader}>
-              <div>
-                <span>Selected job</span>
-                <h2 id="job-inspector-title">{selectedJob?.name ?? "No job"}</h2>
+          <div className={styles.inspectorStack}>
+            <ImageGenerationPanel
+              job={imageGeneration.job}
+              isBusy={imageGeneration.isBusy}
+              isSubmitting={imageGeneration.isSubmitting}
+              isCanceling={imageGeneration.isCanceling}
+              hasError={imageGeneration.hasError}
+              canRetry={imageGeneration.canRetry}
+              onSubmit={submitImageJob}
+              onCancel={imageGeneration.cancel}
+              onRetry={retryImageJob}
+            />
+
+            <section className={styles.jobInspector} aria-labelledby="job-inspector-title">
+              <header className={styles.inspectorHeader}>
+                <div>
+                  <span>Selected job</span>
+                  <h2 id="job-inspector-title">{selectedJob?.name ?? "No job"}</h2>
+                </div>
+                {selectedJob ? (
+                  <StatusIndicator label={selectedJob.status} tone={statusTone[selectedJob.status]} />
+                ) : null}
+              </header>
+
+              <div className={styles.inspectorBody}>
+                <Field label="Focus job" htmlFor="focus-job" hint="Selection is shared by the 2D and 3D stage.">
+                  <Select id="focus-job" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+                    {jobs.map((job) => (
+                      <option value={job.id} key={job.id}>
+                        {job.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {selectedJob ? (
+                  <>
+                    <div className={styles.progressBlock}>
+                      <div>
+                        <span>Progress</span>
+                        <strong>{selectedJob.progress}%</strong>
+                      </div>
+                      <span className={styles.inspectorProgress} aria-hidden="true">
+                        <span style={{ width: `${selectedJob.progress}%` }} />
+                      </span>
+                    </div>
+
+                    <dl className={styles.jobDetails}>
+                      <div>
+                        <dt>Phase</dt>
+                        <dd>{selectedJob.phase}</dd>
+                      </div>
+                      <div>
+                        <dt>Started</dt>
+                        <dd>{formatStartedAt(selectedJob.startedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>Mode</dt>
+                        <dd>{mode.toUpperCase()} projection</dd>
+                      </div>
+                      {selectedJob.imageJob ? (
+                        <>
+                          <div>
+                            <dt>Ratio</dt>
+                            <dd>{selectedJob.imageJob.settings.aspectRatio}</dd>
+                          </div>
+                          <div>
+                            <dt>Style</dt>
+                            <dd>{selectedJob.imageJob.settings.style}</dd>
+                          </div>
+                          <div>
+                            <dt>Seed</dt>
+                            <dd>{selectedJob.imageJob.settings.seed}</dd>
+                          </div>
+                          <div>
+                            <dt>Created</dt>
+                            <dd>{formatStartedAt(new Date(selectedJob.imageJob.createdAt))}</dd>
+                          </div>
+                        </>
+                      ) : null}
+                    </dl>
+                    {selectedJob.imageJob ? (
+                      <p className={styles.jobPrompt}>{selectedJob.imageJob.prompt}</p>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
-              {selectedJob ? (
-                <StatusIndicator label={selectedJob.status} tone={statusTone[selectedJob.status]} />
-              ) : null}
-            </header>
-
-            <div className={styles.inspectorBody}>
-              <Field label="Focus job" htmlFor="focus-job" hint="Selection is shared by the 2D and 3D stage.">
-                <Select id="focus-job" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-                  {jobs.map((job) => (
-                    <option value={job.id} key={job.id}>
-                      {job.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              {selectedJob ? (
-                <>
-                  <div className={styles.progressBlock}>
-                    <div>
-                      <span>Progress</span>
-                      <strong>{selectedJob.progress}%</strong>
-                    </div>
-                    <span className={styles.inspectorProgress} aria-hidden="true">
-                      <span style={{ width: `${selectedJob.progress}%` }} />
-                    </span>
-                  </div>
-
-                  <dl className={styles.jobDetails}>
-                    <div>
-                      <dt>Phase</dt>
-                      <dd>{selectedJob.phase}</dd>
-                    </div>
-                    <div>
-                      <dt>Started</dt>
-                      <dd>{formatStartedAt(selectedJob.startedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Mode</dt>
-                      <dd>{mode.toUpperCase()} projection</dd>
-                    </div>
-                  </dl>
-                </>
-              ) : null}
-            </div>
-          </section>
+            </section>
+          </div>
 
           <HealthPanel />
         </aside>

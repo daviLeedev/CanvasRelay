@@ -12,6 +12,7 @@ const statusColors: Record<JobStatus, string> = {
   queued: "#efb74e",
   running: "#6f9cff",
   completed: "#48c992",
+  canceled: "#8793a1",
 };
 
 function JobPlate({ job, y, selected, animated, onSelect }: Readonly<{
