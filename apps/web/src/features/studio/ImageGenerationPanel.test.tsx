@@ -30,6 +30,12 @@ const completedJob: ImageJobResponse = {
   id: "img_complete",
   status: "completed",
   progress: 100,
+  phase: "completed",
+  currentStep: 8,
+  totalSteps: 8,
+  progressSource: "provider",
+  stalled: false,
+  estimatedRemainingSeconds: null,
   prompt: "A structured studio still",
   settings: {
     aspectRatio: "4:3",
@@ -38,15 +44,21 @@ const completedJob: ImageJobResponse = {
     provider: "demo",
     operation: "generate",
     hasFaceReference: false,
+    sourceJobId: null,
+    edit: null,
   },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: "2026-08-01T00:00:01Z",
   completedAt: "2026-08-01T00:00:04Z",
   result: {
     url: "/api/v1/image-jobs/img_complete/result",
+    thumbnailUrl: "/api/v1/image-jobs/img_complete/thumbnail",
     mimeType: "image/svg+xml",
     width: 1152,
     height: 864,
+    sizeBytes: 4096,
+    sha256: "a".repeat(64),
+    available: true,
   },
   error: null,
 };
@@ -129,6 +141,8 @@ describe("ImageGenerationPanel", () => {
           ...completedJob,
           status: "running",
           progress: null,
+          currentStep: 3,
+          stalled: true,
           settings: { ...completedJob.settings, provider: "comfyui" },
           result: null,
           completedAt: null,
@@ -138,5 +152,7 @@ describe("ImageGenerationPanel", () => {
 
     expect(screen.getByText("Live")).toBeInTheDocument();
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Step 3 of 8")).toBeInTheDocument();
+    expect(screen.getByText(/taking longer than usual/iu)).toBeInTheDocument();
   });
 });

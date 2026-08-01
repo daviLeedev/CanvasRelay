@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,9 +24,11 @@ def build_image_provider(settings: Settings) -> ImageGenerationProvider:
             workflow_path=settings.resolved_comfyui_workflow_path,
             edit_workflow_path=settings.resolved_comfyui_edit_workflow_path,
             edit_face_workflow_path=settings.resolved_comfyui_edit_face_workflow_path,
+            edit_lora_allowlist_path=settings.resolved_comfyui_edit_lora_allowlist_path,
             output_node_id=settings.comfyui_output_node_id,
             timeout_seconds=settings.comfyui_timeout_seconds,
             max_result_bytes=settings.comfyui_max_result_bytes,
+            stalled_after_seconds=settings.comfyui_stalled_after_seconds,
         )
     return DemoImageProvider()
 
@@ -36,14 +41,31 @@ def create_app(
     upload_store: FilesystemUploadStore | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
-    repository = image_jobs or ImageJobRepository(database_path=app_settings.database_path)
+    owns_repository = image_jobs is None
+    repository = image_jobs or ImageJobRepository(
+        database_url=app_settings.resolved_database_url,
+        create_schema=app_settings.resolved_database_url.startswith("sqlite"),
+        pool_size=app_settings.database_pool_size,
+        max_overflow=app_settings.database_max_overflow,
+    )
     provider = image_provider or build_image_provider(app_settings)
-    result_store = media_store or FilesystemMediaStore(app_settings.media_root)
+    result_store = media_store or FilesystemMediaStore(
+        app_settings.media_root,
+        app_settings.thumbnail_root,
+    )
     source_store = upload_store or FilesystemUploadStore(app_settings.upload_root)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        if owns_repository:
+            repository.close()
+
     application = FastAPI(
         title="CanvasRelay API",
         version=app_settings.app_version,
         description="Public orchestration API for the CanvasRelay studio.",
+        lifespan=lifespan,
     )
     application.state.settings = app_settings
     application.state.image_jobs = repository

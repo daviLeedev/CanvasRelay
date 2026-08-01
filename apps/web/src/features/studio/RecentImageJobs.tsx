@@ -58,10 +58,13 @@ export function RecentImageJobs({
                     <Clock3 aria-hidden="true" size={18} />
                   )}
                 </span>
-                <span>
-                  <strong>{item.status}</strong>
-                  <small>{item.settings.provider}</small>
+                <span className={styles.recentCopy}>
+                  <strong>{item.prompt}</strong>
+                  <small>
+                    {item.settings.style} · {item.settings.aspectRatio} · {item.settings.provider}
+                  </small>
                 </span>
+                <span className={styles.recentStatus} data-status={item.status}>{item.status}</span>
               </button>
             );
           })}

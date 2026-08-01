@@ -12,11 +12,17 @@ playwright-report/
 .venv/
 __pycache__/
 .pytest_cache/
+.pytest-tmp-*/
+.test-data-*/
 .mypy_cache/
 .ruff_cache/
 *.py[cod]
 
 *.log
+*.db
+*.dump
+*.sqlite
+*.sqlite3
 *.safetensors
 *.ckpt
 *.gguf

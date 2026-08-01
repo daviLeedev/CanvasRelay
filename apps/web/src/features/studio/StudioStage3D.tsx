@@ -181,7 +181,7 @@ export function StudioStage3D({
   return (
     <div className={styles.stage3d} data-testid="stage-3d" data-motion={animated ? "active" : "paused"}>
       <Canvas
-        camera={{ position: [0, 0.25, 9.4], fov: 45, near: 0.1, far: 40 }}
+        camera={{ position: [0, 0.25, 11.8], fov: 55, near: 0.1, far: 40 }}
         dpr={[1, 1.5]}
         frameloop={animated ? "always" : "demand"}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}

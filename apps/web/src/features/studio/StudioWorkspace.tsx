@@ -101,13 +101,13 @@ export function StudioWorkspace() {
     <div className={styles.workspace}>
       <header className={styles.localToolbar}>
         <div className={styles.workspaceTitle}>
-          <span>Image workspace</span>
-          <h1>Studio relay</h1>
+          <span>Generation workspace</span>
+          <h1>Image generation</h1>
         </div>
 
         <div className={styles.toolbarStatus}>
           <ApiToolbarStatus />
-          <span className={styles.summary} aria-label="Mock job summary">
+          <span className={styles.summary} aria-label="Job summary">
             <span>{summary.queued} queued</span>
             <span>{summary.running} running</span>
             <span>{summary.completed} complete</span>
@@ -153,32 +153,34 @@ export function StudioWorkspace() {
         </section>
 
         <aside className={styles.inspector} aria-label="Job and API inspector">
-          <div className={styles.inspectorStack}>
-            <ImageGenerationPanel
-              job={imageGeneration.job}
-              isBusy={imageGeneration.isBusy}
-              isSubmitting={imageGeneration.isSubmitting}
-              isCanceling={imageGeneration.isCanceling}
-              hasError={imageGeneration.hasError}
-              canRetry={imageGeneration.canRetry}
-              provider={imageProvider.data ?? null}
-              providerStatusUnavailable={imageProvider.isError}
-              onSubmit={submitImageJob}
-              onCancel={imageGeneration.cancel}
-              onRetry={retryImageJob}
-            />
+          <ImageGenerationPanel
+            job={imageGeneration.job}
+            isBusy={imageGeneration.isBusy}
+            isSubmitting={imageGeneration.isSubmitting}
+            isCanceling={imageGeneration.isCanceling}
+            hasError={imageGeneration.hasError}
+            canRetry={imageGeneration.canRetry}
+            provider={imageProvider.data ?? null}
+            providerStatusUnavailable={imageProvider.isError}
+            onSubmit={submitImageJob}
+            onCancel={imageGeneration.cancel}
+            onRetry={retryImageJob}
+          />
 
-            <RecentImageJobs
-              jobs={imageGeneration.recentJobs}
-              selectedId={imageGeneration.job?.id}
-              loading={imageGeneration.isLoadingRecent}
-              onSelect={(jobId) => {
-                imageGeneration.selectJob(jobId);
-                setSelectedId(jobId);
-              }}
-            />
+          <RecentImageJobs
+            jobs={imageGeneration.recentJobs}
+            selectedId={imageGeneration.job?.id}
+            loading={imageGeneration.isLoadingRecent}
+            onSelect={(jobId) => {
+              imageGeneration.selectJob(jobId);
+              setSelectedId(jobId);
+            }}
+          />
 
-            <section className={styles.jobInspector} aria-labelledby="job-inspector-title">
+          <section
+            className={styles.jobInspector}
+            aria-label="Selected job inspector"
+          >
               <header className={styles.inspectorHeader}>
                 <div>
                   <span>Selected job</span>
@@ -264,10 +266,11 @@ export function StudioWorkspace() {
                   </>
                 ) : null}
               </div>
-            </section>
-          </div>
+          </section>
 
-          <HealthPanel />
+          <div className={styles.healthRegion}>
+            <HealthPanel />
+          </div>
         </aside>
       </div>
     </div>

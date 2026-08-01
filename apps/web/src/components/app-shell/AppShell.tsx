@@ -39,3 +39,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     </div>
   );
 }
+
+export function WorkspaceLoading({ label }: Readonly<{ label: string }>) {
+  return <div className={styles.workspaceLoading} role="status">{label}</div>;
+}

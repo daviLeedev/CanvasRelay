@@ -14,10 +14,16 @@ from app.domain.image_jobs import (
     image_dimensions,
     render_demo_svg,
 )
-from app.providers.base import ImageProviderError, ProviderDescriptor
+from app.providers.base import (
+    ImageEditProviderOptions,
+    ImageProviderError,
+    LoraOption,
+    ProviderDescriptor,
+)
 
 QUEUE_DURATION = timedelta(milliseconds=750)
 RUN_DURATION = timedelta(milliseconds=2750)
+PREPARE_DURATION = timedelta(milliseconds=500)
 
 
 class DemoImageProvider:
@@ -39,6 +45,16 @@ class DemoImageProvider:
 
     async def describe_edit(self) -> ProviderDescriptor:
         return await self.describe()
+
+    async def describe_edit_options(self) -> ImageEditProviderOptions:
+        return ImageEditProviderOptions(
+            samplers=("euler", "dpmpp_2m"),
+            schedulers=("simple", "karras"),
+            loras=(
+                LoraOption("demo-detail", "Detail enhancer"),
+                LoraOption("demo-light", "Studio lighting"),
+            ),
+        )
 
     async def submit(self, request: ImageGenerationRequest) -> str:
         with self._lock:
@@ -67,19 +83,52 @@ class DemoImageProvider:
         completed_at = queued_until + RUN_DURATION
         now = self._clock()
         if now < queued_until:
-            return ProviderSnapshot("queued", 0)
+            return ProviderSnapshot(
+                "queued",
+                0,
+                phase="queued",
+                progress_source="inferred",
+                progress_updated_at=now,
+            )
+        preparing_until = queued_until + PREPARE_DURATION
+        if now < preparing_until:
+            return ProviderSnapshot(
+                "running",
+                None,
+                phase="preparing",
+                progress_source="inferred",
+                progress_updated_at=now,
+            )
         if now < completed_at:
-            elapsed = (now - queued_until).total_seconds()
-            fraction = elapsed / RUN_DURATION.total_seconds()
-            return ProviderSnapshot("running", min(95, 8 + round(fraction * 87)))
+            elapsed = (now - preparing_until).total_seconds()
+            sampling_duration = (RUN_DURATION - PREPARE_DURATION).total_seconds()
+            fraction = max(0.0, min(1.0, elapsed / sampling_duration))
+            total_steps = request.edit_settings.steps if request.edit_settings else 8
+            current_step = max(1, min(total_steps, round(fraction * total_steps)))
+            return ProviderSnapshot(
+                "running",
+                min(95, round(fraction * 95)),
+                phase="sampling",
+                current_step=current_step,
+                total_steps=total_steps,
+                progress_source="provider",
+                progress_updated_at=now,
+            )
         width, height = image_dimensions(request.aspect_ratio)
-        return ProviderSnapshot("completed", 100, ProviderResult("image/svg+xml", width, height))
+        return ProviderSnapshot(
+            "completed",
+            100,
+            ProviderResult("image/svg+xml", width, height),
+            phase="completed",
+            progress_source="provider",
+            progress_updated_at=now,
+        )
 
     async def cancel(self, provider_job_id: str) -> ProviderSnapshot:
         self._get(provider_job_id)
         with self._lock:
             self._canceled.add(provider_job_id)
-        return ProviderSnapshot("canceled", 0)
+        return ProviderSnapshot("canceled", 0, phase="canceled", progress_source="provider")
 
     async def collect(self, provider_job_id: str) -> ProviderContent:
         request = self._get(provider_job_id)

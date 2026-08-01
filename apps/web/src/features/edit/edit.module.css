@@ -72,10 +72,146 @@
 
 .stage {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 44px minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   background: #090c10;
+}
+
+.stageTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: #10151b;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.stageTools > div {
+  display: flex;
+  gap: 4px;
+}
+
+.stageTools button,
+.stageTools a,
+.loraActions button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--control);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.stageTools button:hover,
+.stageTools a:hover,
+.loraActions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.stageTools button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--control));
+  color: var(--accent-strong);
+}
+
+.compareFrame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.compareFrame img {
+  object-fit: contain;
+  transform: scale(var(--media-zoom, 1));
+  transform-origin: center;
+}
+
+.resultLayer {
+  position: absolute;
+  inset: 0;
+}
+
+.compareDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f5f7fa;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+  transform: translateX(-1px);
+}
+
+.progressOverlay {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgb(10 14 18 / 90%);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.progressOverlay strong {
+  color: var(--text-primary);
+}
+
+.activeStage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  margin: auto;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.activeStage span {
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.activeStage strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.activeStage p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.compareControl {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.compareControl input {
+  flex: 1;
+  accent-color: var(--accent);
 }
 
 .comparisonPane {
@@ -133,6 +269,11 @@
   gap: var(--space-3);
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.emptyStage strong {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .emptyStage[data-active="true"] strong {
@@ -283,7 +424,9 @@
 }
 
 .promptInput,
-.seedInput {
+.seedInput,
+.advanced input,
+.loraRow input {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -303,6 +446,103 @@
   padding: 0 12px;
 }
 
+.advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.advanced > summary {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.advanced[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.advancedBody {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 10px 10px;
+}
+
+.advanced input,
+.loraRow input {
+  min-height: 36px;
+  padding: 0 9px;
+}
+
+.loraSection {
+  display: grid;
+  gap: 8px;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.loraHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.loraHeading span,
+.optionHint {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.loraRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 64px auto;
+  align-items: end;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--control);
+}
+
+.loraRow > strong {
+  align-self: center;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loraRow label {
+  display: grid;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.loraActions {
+  display: flex;
+  gap: 3px;
+}
+
+.loraActions button {
+  width: 25px;
+  height: 36px;
+}
+
+.loraActions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .settingGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -320,13 +560,54 @@
 }
 
 .liveJob {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px var(--space-3);
   padding: 0 var(--space-4) var(--space-4);
   color: var(--text-muted);
   font-size: 11px;
   text-transform: capitalize;
+}
+
+.liveJob > div,
+.liveJob > div small {
+  display: grid;
+  gap: 2px;
+}
+
+.liveJob small,
+.liveJob p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: none;
+}
+
+.liveJob p {
+  grid-column: 1 / -1;
+  color: var(--warning);
+}
+
+.liveJob button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.toast {
+  position: fixed;
+  z-index: 80;
+  top: var(--space-4);
+  right: var(--space-4);
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+  color: var(--text-primary);
+  font-size: 11px;
 }
 
 .liveJob strong {
@@ -381,6 +662,11 @@
     border-top: 1px solid var(--border);
     border-left: 0;
   }
+
+  .editPanel {
+    min-height: 0;
+    overflow: visible;
+  }
 }
 
 @media (max-width: 700px) {
@@ -425,6 +711,10 @@
     min-height: 420px;
   }
 
+  .compareFrame {
+    min-height: 420px;
+  }
+
   .comparisonPane + .comparisonPane {
     border-top: 1px solid var(--border);
     border-left: 0;
@@ -436,5 +726,14 @@
 
   .settingGrid {
     grid-template-columns: 1fr;
+  }
+
+  .loraRow {
+    grid-template-columns: minmax(0, 1fr) 62px 62px;
+  }
+
+  .loraActions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 }

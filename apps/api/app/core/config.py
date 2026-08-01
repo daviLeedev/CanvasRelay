@@ -20,11 +20,16 @@ class Settings(BaseSettings):
     comfyui_workflow_path: Path | None = None
     comfyui_edit_workflow_path: Path | None = None
     comfyui_edit_face_workflow_path: Path | None = None
+    comfyui_edit_lora_allowlist_path: Path | None = None
     comfyui_output_node_id: str | None = None
     comfyui_timeout_seconds: float = 30
     comfyui_max_result_bytes: int = 50 * 1024 * 1024
+    comfyui_stalled_after_seconds: float = 90
     max_upload_bytes: int = 20 * 1024 * 1024
     data_dir: Path = Path(".canvasrelay")
+    database_url: str | None = None
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     app_version: str = "0.1.0"
 
@@ -63,6 +68,10 @@ class Settings(BaseSettings):
         return self._resolve_repository_path(self.comfyui_edit_face_workflow_path)
 
     @property
+    def resolved_comfyui_edit_lora_allowlist_path(self) -> Path | None:
+        return self._resolve_repository_path(self.comfyui_edit_lora_allowlist_path)
+
+    @property
     def resolved_data_dir(self) -> Path:
         if self.data_dir.is_absolute():
             return self.data_dir
@@ -74,8 +83,18 @@ class Settings(BaseSettings):
         return self.resolved_data_dir / "canvasrelay.sqlite3"
 
     @property
+    def resolved_database_url(self) -> str:
+        if self.database_url:
+            return self.database_url
+        return f"sqlite+pysqlite:///{self.database_path.as_posix()}"
+
+    @property
     def media_root(self) -> Path:
         return self.resolved_data_dir / "media" / "images"
+
+    @property
+    def thumbnail_root(self) -> Path:
+        return self.resolved_data_dir / "media" / "thumbnails"
 
     @property
     def upload_root(self) -> Path:

@@ -1,11 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createImageEditJob, createImageJob, fetchImageJob, fetchImageJobs, subscribeImageJob } from "./imageJobs";
+import {
+  createImageEditJob,
+  createImageJob,
+  deleteImageJobAsset,
+  fetchImageEditOptions,
+  fetchImageJob,
+  fetchImageJobPage,
+  fetchImageJobs,
+  subscribeImageJob,
+} from "./imageJobs";
 
 const queuedJob = {
   id: "img_demo",
   status: "queued",
   progress: 0,
+  phase: "queued",
+  currentStep: null,
+  totalSteps: null,
+  progressSource: "inferred",
+  stalled: false,
+  estimatedRemainingSeconds: null,
   prompt: "A structured studio still",
   settings: {
     aspectRatio: "4:3",
@@ -14,6 +29,8 @@ const queuedJob = {
     provider: "demo",
     operation: "generate",
     hasFaceReference: false,
+    sourceJobId: null,
+    edit: null,
   },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: null,
@@ -74,6 +91,14 @@ describe("image job API client", () => {
       seed: 7,
       source,
       faceReference,
+      steps: 8,
+      cfg: 1,
+      referenceInfluence: 4,
+      groundingResolution: 768,
+      fitMode: "fit",
+      sampler: "euler",
+      scheduler: "simple",
+      loras: [],
     });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -101,6 +126,50 @@ describe("image job API client", () => {
     await expect(request).rejects.not.toThrow(/private stack|internal endpoint/iu);
   });
 
+  it("submits a Library source by job id without uploading it again", async () => {
+    const editedJob = {
+      ...queuedJob,
+      settings: { ...queuedJob.settings, operation: "edit", sourceJobId: "img_source" },
+    } as const;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(editedJob), { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createImageEditJob({
+      prompt: "Use the Library source",
+      aspectRatio: "4:3",
+      style: "editorial",
+      sourceJobId: "img_source",
+      steps: 8,
+      cfg: 1,
+      referenceInfluence: 4,
+      groundingResolution: 768,
+      fitMode: "fit",
+      sampler: "euler",
+      scheduler: "simple",
+      loras: [],
+    });
+
+    const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.get("sourceJobId")).toBe("img_source");
+    expect(body.has("source")).toBe(false);
+  });
+
+  it("loads provider-owned edit options", async () => {
+    const options = {
+      samplers: ["euler"],
+      schedulers: ["simple"],
+      loras: [{ id: "detail", label: "Detail enhancer" }],
+      defaults: { steps: 8, cfg: 1, sampler: "euler", scheduler: "simple" },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(options), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+
+    await expect(fetchImageEditOptions()).resolves.toEqual(options);
+  });
+
   it("loads and validates the persistent job list", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ items: [queuedJob] }), {
@@ -112,6 +181,23 @@ describe("image job API client", () => {
 
     await expect(fetchImageJobs(6, "completed", "generate")).resolves.toEqual([queuedJob]);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("limit=6&status=completed&operation=generate");
+  });
+
+  it("returns a validated page cursor and deletes an owned Library asset", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [queuedJob], nextCursor: "page-two" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchImageJobPage({ limit: 1 })).resolves.toMatchObject({ nextCursor: "page-two" });
+    await expect(deleteImageJobAsset("img_demo")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "DELETE" });
   });
 
   it("streams typed job updates and closes the subscription", () => {

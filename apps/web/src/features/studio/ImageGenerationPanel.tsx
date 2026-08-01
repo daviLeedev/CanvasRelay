@@ -4,7 +4,6 @@ import { RotateCcw, Square, WandSparkles } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
 import type { ImageJobCreate, ImageJobResponse } from "@/lib/api/imageJobs";
 import type { ImageProviderResponse } from "@/lib/api/imageProvider";
@@ -61,13 +60,17 @@ export function ImageGenerationPanel({
   const progressLabel = job?.progress === null ? "Unavailable" : `${job?.progress ?? 0}%`;
   const providerLabel = provider?.label ?? "Image provider";
   const providerMode = provider?.mode === "live" ? "Live" : "Demo";
+  const stepLabel =
+    job?.currentStep !== null && job?.currentStep !== undefined && job.totalSteps
+      ? `Step ${job.currentStep} of ${job.totalSteps}`
+      : null;
 
   return (
     <section className={styles.generationPanel} aria-labelledby="generation-panel-title">
       <header className={styles.panelHeading}>
         <div>
           <span>{providerLabel}</span>
-          <h2 id="generation-panel-title">Generate image</h2>
+          <h2 id="generation-panel-title">Create image</h2>
         </div>
         <span className={styles.demoPill} data-mode={provider?.mode ?? "checking"}>
           {providerStatusUnavailable ? "Offline" : providerMode}
@@ -75,11 +78,11 @@ export function ImageGenerationPanel({
       </header>
 
       <form className={styles.generationForm} onSubmit={handleSubmit}>
-        <Field
-          label="Prompt"
-          htmlFor="image-prompt"
-          hint={provider?.message ?? "Checking the configured image provider."}
-        >
+        <div className={styles.promptField}>
+          <div className={styles.fieldTopline}>
+            <label htmlFor="image-prompt">Prompt</label>
+            <span>{prompt.length} / 1200</span>
+          </div>
           <textarea
             className={styles.promptInput}
             id="image-prompt"
@@ -89,10 +92,16 @@ export function ImageGenerationPanel({
             onChange={(event) => setPrompt(event.target.value)}
             placeholder="Describe the image to relay"
           />
-        </Field>
+          <p className={styles.promptHint}>
+            {provider?.message ?? "Checking the configured image provider."}
+          </p>
+        </div>
 
-        <div className={styles.settingGrid}>
-          <Field label="Aspect ratio" htmlFor="image-aspect-ratio">
+        <fieldset className={styles.settingsGroup}>
+          <legend>Output setup</legend>
+          <div className={styles.settingGrid}>
+            <label className={styles.compactField} htmlFor="image-aspect-ratio">
+              <span>Aspect ratio</span>
             <Select
               id="image-aspect-ratio"
               value={aspectRatio}
@@ -103,8 +112,9 @@ export function ImageGenerationPanel({
               <option value="3:4">3:4 Portrait</option>
               <option value="16:9">16:9 Wide</option>
             </Select>
-          </Field>
-          <Field label="Style" htmlFor="image-style">
+            </label>
+            <label className={styles.compactField} htmlFor="image-style">
+              <span>Style</span>
             <Select
               id="image-style"
               value={style}
@@ -114,22 +124,25 @@ export function ImageGenerationPanel({
               <option value="product">Product</option>
               <option value="concept">Concept</option>
             </Select>
-          </Field>
-        </div>
+            </label>
+          </div>
 
-        <Field label="Seed (optional)" htmlFor="image-seed">
-          <input
-            className={styles.seedInput}
-            id="image-seed"
-            inputMode="numeric"
-            min="0"
-            max="2147483647"
-            type="number"
-            value={seed}
-            onChange={(event) => setSeed(event.target.value)}
-            placeholder="Derived from prompt"
-          />
-        </Field>
+          <label className={styles.compactField} htmlFor="image-seed">
+            <span>Seed <small>Optional</small></span>
+            <input
+              className={styles.seedInput}
+              id="image-seed"
+              aria-label="Seed (optional)"
+              inputMode="numeric"
+              min="0"
+              max="2147483647"
+              type="number"
+              value={seed}
+              onChange={(event) => setSeed(event.target.value)}
+              placeholder="Derived from prompt"
+            />
+          </label>
+        </fieldset>
 
         <div className={styles.generationActions}>
           <Button variant="primary" type="submit" disabled={!canGenerate}>
@@ -147,14 +160,23 @@ export function ImageGenerationPanel({
 
       {job ? (
         <div className={styles.liveJob} aria-live="polite">
-          <div>
-            <span>{job.status}</span>
-            <strong>{progressLabel}</strong>
+          <div className={styles.runStatusRow}>
+            <div>
+              <span>Current run</span>
+              <strong>{job.phase}</strong>
+            </div>
+            <div>
+              {stepLabel ? <small>{stepLabel}</small> : null}
+              <strong>{progressLabel}</strong>
+            </div>
           </div>
           {job.progress !== null ? (
             <span className={styles.inspectorProgress} aria-hidden="true">
               <span style={{ width: `${job.progress}%` }} />
             </span>
+          ) : null}
+          {job.stalled ? (
+            <p className={styles.stalledMessage}>The provider is taking longer than usual to prepare.</p>
           ) : null}
         </div>
       ) : null}

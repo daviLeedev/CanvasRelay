@@ -15,7 +15,8 @@ runs without credentials, models, or a GPU.
 - FastAPI and Pydantic Settings
 - OpenAPI-generated TypeScript contracts
 - Provider-neutral image jobs with Demo and optional ComfyUI adapters
-- SQLite-backed job history and a filesystem result library
+- PostgreSQL-backed job history and a filesystem result library
+- SQLite repository fallback for tests and standalone local runs
 - Server-sent job updates with polling fallback
 - Pytest, Ruff, MyPy, Vitest, and Testing Library
 - pnpm workspaces and uv
@@ -53,6 +54,14 @@ docker compose up --build
 No provider credentials, model files, or GPU are required for the foundation
 runtime.
 
+Docker opens CanvasRelay on ports that do not overlap the local Grok Studio
+runtime:
+
+- Web: <http://localhost:13080>
+- API: <http://localhost:18080>
+- API documentation: <http://localhost:18080/docs>
+- Health: <http://localhost:18080/api/v1/health>
+
 ## Verification
 
 ```bash
@@ -65,15 +74,41 @@ pnpm build
 docker compose config
 ```
 
+Optional live ComfyUI checks run only against an explicitly selected local API:
+
+```powershell
+$env:CANVASRELAY_LIVE_TEST_API_URL="http://127.0.0.1:8000"
+pnpm test:api -- -m live_comfyui
+```
+
+The live suite reuses provider-advertised options, stores results through CanvasRelay, and skips
+optional LoRA coverage when no public local allowlist is configured. The default test suite never
+requires a GPU or ComfyUI.
+
 ## Configuration
 
 Copy the names from `.env.example` into your own untracked environment file or
 shell environment. Only the public API base URL is exposed to browser code.
 
-`CANVASRELAY_DATA_DIR` controls the private runtime directory that contains the
-SQLite job index and generated media. It defaults to the ignored `.canvasrelay/`
-directory. Completed results are available from the Studio history and the
-`/library` route, including after an API restart.
+`CANVASRELAY_DATABASE_URL` selects the metadata database. Docker Compose uses
+PostgreSQL by default; omitting it in native development uses the SQLite
+fallback. `CANVASRELAY_DATA_DIR` controls the private runtime directory that
+contains uploads, originals, and generated WebP thumbnails. Completed results
+remain available from Studio history and `/library` after API, database, or
+provider restarts.
+
+To import an existing SQLite index after applying the PostgreSQL migration:
+
+```bash
+uv run --directory apps/api alembic upgrade head
+uv run --directory apps/api python -m app.cli.import_sqlite \
+  --sqlite .canvasrelay/canvasrelay.sqlite3 \
+  --database-url "$CANVASRELAY_DATABASE_URL" \
+  --data-dir .canvasrelay --dry-run
+```
+
+Remove `--dry-run` after checking the summary. Repeating the import does not
+duplicate existing job IDs.
 
 ### Optional local ComfyUI generation
 
@@ -91,6 +126,22 @@ server. The browser never receives the ComfyUI address or workflow path.
 
 See [the ComfyUI adapter example](examples/comfyui/README.md) for the template,
 status behavior, cancellation limits, and safe setup details.
+
+Image edit options are read from ComfyUI's `object_info` response. Optional
+LoRAs are exposed only through an ignored local allowlist configured with
+`CANVASRELAY_COMFYUI_EDIT_LORA_ALLOWLIST_PATH`. The file uses neutral public
+IDs and labels while keeping local filenames server-side:
+
+```json
+{
+  "loras": [
+    { "id": "detail", "label": "Detail enhancer", "filename": "folder/file.safetensors" }
+  ]
+}
+```
+
+The API stores the selected order and independent model/CLIP weights in job
+metadata. Neither the allowlist nor workflow JSON belongs in the repository.
 
 ## Documentation
 

@@ -8,6 +8,7 @@ import {
   createImageEditJob,
   fetchImageJob,
   fetchImageJobs,
+  retryImageJob,
   subscribeImageJob,
   type ImageEditJobCreate,
   type ImageJobResponse,
@@ -26,6 +27,7 @@ export function useImageEditJob() {
   const recentQuery = useQuery({
     queryKey: RECENT_QUERY_KEY,
     queryFn: () => fetchImageJobs(24, undefined, "edit"),
+    placeholderData: (previousData) => previousData,
   });
 
   const restoredId = useMemo(() => {
@@ -69,13 +71,25 @@ export function useImageEditJob() {
     },
   });
 
+  const retryMutation = useMutation({
+    mutationFn: retryImageJob,
+    onSuccess: (job) => {
+      queryClient.setQueryData(["image-job", job.id], job);
+      queryClient.setQueryData<ImageJobResponse[]>(RECENT_QUERY_KEY, (current = []) => [
+        job,
+        ...current.filter((item) => item.id !== job.id),
+      ]);
+      setActiveId(job.id);
+    },
+  });
+
   const recentJob = useMemo(
     () => recentQuery.data?.find((item) => item.id === selectedId) ?? null,
     [recentQuery.data, selectedId],
   );
   const job = (jobQuery.data ?? recentJob ?? createMutation.data ?? null) as ImageJobResponse | null;
   const active = job?.status === "queued" || job?.status === "running";
-  const isBusy = active || createMutation.isPending || cancelMutation.isPending;
+  const isBusy = active || createMutation.isPending || cancelMutation.isPending || retryMutation.isPending;
 
   useEffect(() => {
     if (!selectedId || !active || typeof EventSource === "undefined") return;
@@ -119,13 +133,20 @@ export function useImageEditJob() {
   }, [active, cancelMutation, selectedId]);
 
   const retry = useCallback(async () => {
+    if (job?.status === "failed" && job.error?.retryable && selectedId) {
+      try {
+        return await retryMutation.mutateAsync(selectedId);
+      } catch {
+        return null;
+      }
+    }
     if (jobQuery.isError && selectedId) {
       const result = await jobQuery.refetch().catch(() => null);
       return result?.data ?? null;
     }
     if (lastRequest) return await submit(lastRequest);
     return null;
-  }, [jobQuery, lastRequest, selectedId, submit]);
+  }, [job, jobQuery, lastRequest, retryMutation, selectedId, submit]);
 
   return {
     job,
@@ -137,7 +158,10 @@ export function useImageEditJob() {
     isCanceling: cancelMutation.isPending,
     hasError:
       createMutation.isError || jobQuery.isError || cancelMutation.isError || job?.status === "failed",
-    canRetry: lastRequest !== null || (jobQuery.isError && selectedId !== null),
+    canRetry:
+      (job?.status === "failed" && job.error?.retryable === true) ||
+      lastRequest !== null ||
+      (jobQuery.isError && selectedId !== null),
     recentJobs: recentQuery.data ?? [],
     isLoadingRecent: recentQuery.isPending,
     selectJob: setActiveId,

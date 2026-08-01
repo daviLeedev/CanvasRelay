@@ -12,7 +12,9 @@ COPY apps/api/pyproject.toml apps/api/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY apps/api/app ./app
+COPY apps/api/alembic.ini ./alembic.ini
+COPY apps/api/alembic ./alembic
 
 EXPOSE 8000
 
-CMD ["uv", "run", "--frozen", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uv run --frozen --no-dev alembic upgrade head && exec uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000"]

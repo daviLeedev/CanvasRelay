@@ -15,6 +15,7 @@ status.
 | Architecture | [English](architecture.md) | [한국어](ko/architecture.md) |
 | Migration plan | [English](migration-plan.md) | [한국어](ko/migration-plan.md) |
 | ADR 0001 | [English](adr/0001-nextjs-fastapi-monorepo.md) | [한국어](ko/adr/0001-nextjs-fastapi-monorepo.md) |
+| ADR 0002 | [English](adr/0002-postgres-filesystem-media.md) | [한국어](ko/adr/0002-postgres-filesystem-media.md) |
 
 ## Translation Policy
 

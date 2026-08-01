@@ -11,6 +11,12 @@ const queued: ImageJobResponse = {
   id: "img_poll",
   status: "queued",
   progress: 0,
+  phase: "queued",
+  currentStep: null,
+  totalSteps: null,
+  progressSource: "inferred",
+  stalled: false,
+  estimatedRemainingSeconds: null,
   prompt: "A relay test image",
   settings: {
     aspectRatio: "1:1",
@@ -19,6 +25,8 @@ const queued: ImageJobResponse = {
     provider: "demo",
     operation: "generate",
     hasFaceReference: false,
+    sourceJobId: null,
+    edit: null,
   },
   createdAt: "2026-08-01T00:00:00Z",
   startedAt: null,
@@ -41,9 +49,26 @@ const completed: ImageJobResponse = {
   completedAt: "2026-08-01T00:00:04Z",
   result: {
     url: "/api/v1/image-jobs/img_poll/result",
+    thumbnailUrl: "/api/v1/image-jobs/img_poll/thumbnail",
     mimeType: "image/svg+xml",
     width: 1024,
     height: 1024,
+    sizeBytes: 4096,
+    sha256: "a".repeat(64),
+    available: true,
+  },
+};
+
+const providerRestarted: ImageJobResponse = {
+  ...queued,
+  status: "failed",
+  progress: null,
+  phase: "failed",
+  error: {
+    code: "provider_restarted",
+    message: "The inference provider restarted before this job completed.",
+    action: "Your settings were preserved. Retry the job when the provider is ready.",
+    retryable: true,
   },
 };
 
@@ -136,5 +161,32 @@ describe("useImageGenerationJob", () => {
     });
     await waitFor(() => expect(result.current.job?.status).toBe("queued"));
     expect(postCount).toBe(2);
+  });
+
+  it("retries a persisted provider restart after a browser reload", async () => {
+    const retried: ImageJobResponse = { ...queued, id: "img_retried" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.includes("image-jobs?")) {
+          return new Response(JSON.stringify({ items: [providerRestarted] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (path.endsWith("/retry") && init?.method === "POST") return response(retried, 201);
+        if (path.endsWith("/img_retried")) return response(retried);
+        return response(providerRestarted);
+      }),
+    );
+    const { result } = renderHook(() => useImageGenerationJob(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.job?.status).toBe("failed"));
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    await waitFor(() => expect(result.current.job?.id).toBe("img_retried"));
   });
 });
