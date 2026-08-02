@@ -210,6 +210,10 @@
     flex-basis: 28px;
   }
 
+  .mobileBar .brandName {
+    display: none;
+  }
+
   .mobileNavItem {
     justify-content: center;
     width: 44px;

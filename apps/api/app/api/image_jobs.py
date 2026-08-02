@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.api.schemas import (
+    GPTImageSettingsResponse,
     ImageEditSettingsResponse,
     ImageGenerationSettingsResponse,
     ImageJobBatchDelete,
@@ -60,6 +61,23 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             sha256=record.result_sha256,
             available=not record.result_missing,
         )
+    assets = [
+        ImageJobResult(
+            url=f"/api/v1/image-jobs/{record.id}/assets/{asset.ordinal}/result",
+            thumbnailUrl=(
+                f"/api/v1/image-jobs/{record.id}/assets/{asset.ordinal}/thumbnail"
+                if asset.thumbnail_key is not None
+                else f"/api/v1/image-jobs/{record.id}/assets/{asset.ordinal}/result"
+            ),
+            mimeType=asset.mime_type,
+            width=asset.width,
+            height=asset.height,
+            sizeBytes=asset.size_bytes,
+            sha256=asset.sha256,
+            available=True,
+        )
+        for asset in record.assets
+    ]
     error = None
     if record.error is not None:
         error = ImageJobError(
@@ -104,6 +122,16 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
                 for item in record.generation_settings.loras
             ],
         )
+    gpt = None
+    if record.gpt_settings is not None:
+        gpt = GPTImageSettingsResponse(
+            quality=record.gpt_settings.quality,
+            size=record.gpt_settings.size,
+            count=record.gpt_settings.count,
+            moderation=record.gpt_settings.moderation,
+            reasoningEffort=record.gpt_settings.reasoning_effort,
+            webSearch=record.gpt_settings.web_search,
+        )
     return ImageJobResponse(
         id=record.id,
         status=record.status,
@@ -126,11 +154,13 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             sourceJobId=record.source_job_id,
             generation=generation,
             edit=edit,
+            gpt=gpt,
         ),
         createdAt=record.created_at,
         startedAt=record.started_at,
         completedAt=record.completed_at,
         result=result,
+        assets=assets,
         error=error,
     )
 
@@ -369,6 +399,38 @@ async def get_image_job_thumbnail(
     return _stored_file_response(request, item)
 
 
+@router.get("/{job_id}/assets/{ordinal}/result", response_class=FileResponse)
+async def get_image_job_asset_result(
+    job_id: str,
+    ordinal: int,
+    request: Request,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> Response:
+    try:
+        item = await service.resolve_asset_file(job_id, ordinal)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
+    return _stored_file_response(request, item)
+
+
+@router.get("/{job_id}/assets/{ordinal}/thumbnail", response_class=FileResponse)
+async def get_image_job_asset_thumbnail(
+    job_id: str,
+    ordinal: int,
+    request: Request,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> Response:
+    try:
+        item = await service.resolve_asset_file(job_id, ordinal, thumbnail=True)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
+    return _stored_file_response(request, item)
+
+
 @router.get("/{job_id}/inputs/{role}", response_class=FileResponse)
 async def get_image_job_input(
     job_id: str,
@@ -378,6 +440,23 @@ async def get_image_job_input(
 ) -> Response:
     try:
         item = service.resolve_input_file(job_id, role)
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
+    return _stored_file_response(request, item)
+
+
+@router.get("/{job_id}/inputs/{role}/{ordinal}", response_class=FileResponse)
+async def get_image_job_input_ordinal(
+    job_id: str,
+    role: str,
+    ordinal: int,
+    request: Request,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> Response:
+    try:
+        item = service.resolve_input_file(job_id, role, ordinal)
     except ImageJobNotFoundError as error:
         raise _not_found(error) from error
     except ImageProviderError as error:

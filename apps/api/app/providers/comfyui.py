@@ -226,6 +226,15 @@ class ComfyUIImageProvider:
         )
         return await self._submit_workflow(request, workflow)
 
+    async def submit_with_references(
+        self, request: ImageGenerationRequest, references: tuple[ProviderContent, ...]
+    ) -> str:
+        if not references:
+            return await self.submit(request)
+        source = references[0]
+        face_reference = references[1] if len(references) > 1 else None
+        return await self.submit_edit(request, source, face_reference)
+
     async def _submit_workflow(
         self,
         request: ImageGenerationRequest,
@@ -570,6 +579,9 @@ class ComfyUIImageProvider:
                 )
             )
         return ProviderContent(response.content, output.mime_type)
+
+    async def collect_many(self, provider_job_id: str) -> tuple[ProviderContent, ...]:
+        return (await self.collect(provider_job_id),)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:

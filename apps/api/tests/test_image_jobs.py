@@ -124,6 +124,7 @@ def test_create_validates_input_and_returns_a_typed_queued_job(tmp_path: Path) -
         "hasFaceReference": False,
         "sourceJobId": None,
         "edit": None,
+        "gpt": None,
         "generation": {
             "steps": 8,
             "cfg": 1.0,

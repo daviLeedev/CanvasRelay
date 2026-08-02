@@ -4,6 +4,92 @@
  */
 
 export interface paths {
+    "/api/v1/connections/codex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Connection Status */
+        get: operations["get_connection_status_api_v1_connections_codex_get"];
+        put?: never;
+        post?: never;
+        /** Disconnect Connection */
+        delete: operations["disconnect_connection_api_v1_connections_codex_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connections/codex/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Connection */
+        post: operations["check_connection_api_v1_connections_codex_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connections/codex/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Connection */
+        post: operations["import_connection_api_v1_connections_codex_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connections/codex/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restart Connection */
+        post: operations["restart_connection_api_v1_connections_codex_restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gpt-image-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Gpt Image Job */
+        post: operations["create_gpt_image_job_api_v1_gpt_image_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -125,6 +211,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/image-jobs/{job_id}/assets/{ordinal}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Job Asset Result */
+        get: operations["get_image_job_asset_result_api_v1_image_jobs__job_id__assets__ordinal__result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}/assets/{ordinal}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Job Asset Thumbnail */
+        get: operations["get_image_job_asset_thumbnail_api_v1_image_jobs__job_id__assets__ordinal__thumbnail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/image-jobs/{job_id}/events": {
         parameters: {
             query?: never;
@@ -151,6 +271,23 @@ export interface paths {
         };
         /** Get Image Job Input */
         get: operations["get_image_job_input_api_v1_image_jobs__job_id__inputs__role__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}/inputs/{role}/{ordinal}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Job Input Ordinal */
+        get: operations["get_image_job_input_ordinal_api_v1_image_jobs__job_id__inputs__role___ordinal__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -301,6 +438,57 @@ export interface components {
     schemas: {
         /** @enum {string} */
         AspectRatio: "1:1" | "4:3" | "3:4" | "16:9";
+        /** Body_create_gpt_image_job_api_v1_gpt_image_jobs_post */
+        Body_create_gpt_image_job_api_v1_gpt_image_jobs_post: {
+            aspectRatio: components["schemas"]["AspectRatio"];
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /**
+             * Mode
+             * @default generate
+             * @enum {string}
+             */
+            mode: "generate" | "edit";
+            /**
+             * Moderation
+             * @default auto
+             * @enum {string}
+             */
+            moderation: "auto" | "low";
+            /** Prompt */
+            prompt: string;
+            /**
+             * Quality
+             * @default auto
+             * @enum {string}
+             */
+            quality: "auto" | "low" | "medium" | "high";
+            /**
+             * Reasoningeffort
+             * @default none
+             * @enum {string}
+             */
+            reasoningEffort: "none" | "low" | "medium" | "high";
+            /** References */
+            references?: string[] | null;
+            /** Seed */
+            seed?: number | null;
+            /**
+             * Size
+             * @default 1024x1024
+             * @enum {string}
+             */
+            size: "1024x1024" | "1024x1536" | "1536x1024";
+            style: components["schemas"]["ImageStyle"];
+            /**
+             * Websearch
+             * @default false
+             */
+            webSearch: boolean;
+        };
         /** Body_create_image_edit_job_api_v1_image_edit_jobs_post */
         Body_create_image_edit_job_api_v1_image_edit_jobs_post: {
             aspectRatio: components["schemas"]["AspectRatio"];
@@ -353,8 +541,44 @@ export interface components {
             steps: number;
             style: components["schemas"]["ImageStyle"];
         };
+        /** CodexConnectionResponse */
+        CodexConnectionResponse: {
+            /** Connected */
+            connected: boolean;
+            /** Message */
+            message: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "disconnected" | "auth_missing" | "starting" | "connected" | "reauth_required" | "proxy_error";
+        };
         /** @enum {string} */
         EditFitMode: "fit" | "crop";
+        /** GPTImageSettingsResponse */
+        GPTImageSettingsResponse: {
+            /** Count */
+            count: number;
+            /**
+             * Moderation
+             * @enum {string}
+             */
+            moderation: "auto" | "low";
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "auto" | "low" | "medium" | "high";
+            /**
+             * Reasoningeffort
+             * @enum {string}
+             */
+            reasoningEffort: "none" | "low" | "medium" | "high";
+            /** Size */
+            size: string;
+            /** Websearch */
+            webSearch: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -538,6 +762,8 @@ export interface components {
         ImageJobOperation: "generate" | "edit";
         /** ImageJobResponse */
         ImageJobResponse: {
+            /** Assets */
+            assets?: components["schemas"]["ImageJobResult"][];
             /** Completedat */
             completedAt: string | null;
             /**
@@ -596,6 +822,7 @@ export interface components {
             aspectRatio: components["schemas"]["AspectRatio"];
             edit?: components["schemas"]["ImageEditSettingsResponse"] | null;
             generation?: components["schemas"]["ImageGenerationSettingsResponse"] | null;
+            gpt?: components["schemas"]["GPTImageSettingsResponse"] | null;
             /** Hasfacereference */
             hasFaceReference: boolean;
             operation: components["schemas"]["ImageJobOperation"];
@@ -621,11 +848,11 @@ export interface components {
         /** @enum {string} */
         ImageMimeType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/webp";
         /** @enum {string} */
-        ImageProgressPhase: "queued" | "uploading" | "preparing" | "sampling" | "saving" | "completed" | "failed" | "canceled";
+        ImageProgressPhase: "queued" | "uploading" | "preparing" | "generating" | "sampling" | "saving" | "completed" | "failed" | "canceled";
         /** @enum {string} */
         ImageProgressSource: "provider" | "inferred" | "unknown";
         /** @enum {string} */
-        ImageProviderName: "demo" | "comfyui";
+        ImageProviderName: "demo" | "comfyui" | "openai_oauth";
         /** ImageProviderResponse */
         ImageProviderResponse: {
             /** Label */
@@ -683,6 +910,139 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_connection_status_api_v1_connections_codex_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexConnectionResponse"];
+                };
+            };
+        };
+    };
+    disconnect_connection_api_v1_connections_codex_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexConnectionResponse"];
+                };
+            };
+        };
+    };
+    check_connection_api_v1_connections_codex_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexConnectionResponse"];
+                };
+            };
+        };
+    };
+    import_connection_api_v1_connections_codex_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexConnectionResponse"];
+                };
+            };
+        };
+    };
+    restart_connection_api_v1_connections_codex_restart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexConnectionResponse"];
+                };
+            };
+        };
+    };
+    create_gpt_image_job_api_v1_gpt_image_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_gpt_image_job_api_v1_gpt_image_jobs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -949,6 +1309,66 @@ export interface operations {
             };
         };
     };
+    get_image_job_asset_result_api_v1_image_jobs__job_id__assets__ordinal__result_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                ordinal: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_job_asset_thumbnail_api_v1_image_jobs__job_id__assets__ordinal__thumbnail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                ordinal: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_image_job_api_v1_image_jobs__job_id__events_get: {
         parameters: {
             query?: never;
@@ -985,6 +1405,37 @@ export interface operations {
             path: {
                 job_id: string;
                 role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_job_input_ordinal_api_v1_image_jobs__job_id__inputs__role___ordinal__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                role: string;
+                ordinal: number;
             };
             cookie?: never;
         };

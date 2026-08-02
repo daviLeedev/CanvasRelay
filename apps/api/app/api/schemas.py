@@ -52,6 +52,17 @@ class ImageGenerationSettingsInput(ApiModel):
         return value
 
 
+class GPTImageSettingsInput(ApiModel):
+    quality: Literal["auto", "low", "medium", "high"] = "auto"
+    size: Literal["1024x1024", "1024x1536", "1536x1024"] = "1024x1024"
+    count: int = Field(default=1, ge=1, le=2)
+    moderation: Literal["auto", "low"] = "auto"
+    reasoning_effort: Literal["none", "low", "medium", "high"] = Field(
+        default="none", alias="reasoningEffort"
+    )
+    web_search: bool = Field(default=False, alias="webSearch")
+
+
 class ImageJobCreate(ApiModel):
     prompt: str = Field(min_length=1, max_length=1200)
     aspect_ratio: AspectRatio = Field(alias="aspectRatio")
@@ -77,6 +88,7 @@ class ImageJobSettings(ApiModel):
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
     generation: ImageGenerationSettingsResponse | None = None
     edit: ImageEditSettingsResponse | None = None
+    gpt: GPTImageSettingsResponse | None = None
 
 
 class LoraSelectionResponse(ApiModel):
@@ -103,6 +115,15 @@ class ImageGenerationSettingsResponse(ApiModel):
     sampler: str
     scheduler: str
     loras: list[LoraSelectionResponse]
+
+
+class GPTImageSettingsResponse(ApiModel):
+    quality: Literal["auto", "low", "medium", "high"]
+    size: str
+    count: int = Field(ge=1, le=2)
+    moderation: Literal["auto", "low"]
+    reasoning_effort: Literal["none", "low", "medium", "high"] = Field(alias="reasoningEffort")
+    web_search: bool = Field(alias="webSearch")
 
 
 class ImageJobResult(ApiModel):
@@ -142,6 +163,7 @@ class ImageJobResponse(ApiModel):
     started_at: datetime | None = Field(alias="startedAt")
     completed_at: datetime | None = Field(alias="completedAt")
     result: ImageJobResult | None
+    assets: list[ImageJobResult] = Field(default_factory=list)
     error: ImageJobError | None
 
 
@@ -225,3 +247,16 @@ class ImageGenerationProviderOptionsResponse(ApiModel):
     schedulers: list[str]
     loras: list[ImageEditLoraOption]
     defaults: ImageGenerationOptionDefaults
+
+
+class CodexConnectionResponse(ApiModel):
+    state: Literal[
+        "disconnected",
+        "auth_missing",
+        "starting",
+        "connected",
+        "reauth_required",
+        "proxy_error",
+    ]
+    connected: bool
+    message: str

@@ -29,10 +29,11 @@ services:
       CANVASRELAY_CORS_ORIGINS: http://localhost:${CANVASRELAY_WEB_PORT:-13080},http://127.0.0.1:${CANVASRELAY_WEB_PORT:-13080}
       CANVASRELAY_DATA_DIR: /data
       CANVASRELAY_DATABASE_URL: postgresql+psycopg://${CANVASRELAY_POSTGRES_USER:-canvasrelay}:${CANVASRELAY_POSTGRES_PASSWORD:-canvasrelay-dev-only}@postgres:5432/${CANVASRELAY_POSTGRES_DB:-canvasrelay}
+      CANVASRELAY_CODEX_OAUTH_ALLOW_DOCKER_GATEWAY: "true"
     volumes:
       - canvasrelay-data:/data
     ports:
-      - "${CANVASRELAY_API_PORT:-18080}:8000"
+      - "127.0.0.1:${CANVASRELAY_API_PORT:-18080}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,7 +63,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${CANVASRELAY_WEB_PORT:-13080}:3000"
+      - "127.0.0.1:${CANVASRELAY_WEB_PORT:-13080}:3000"
 
 volumes:
   canvasrelay-data:

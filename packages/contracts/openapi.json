@@ -10,6 +10,119 @@
         ],
         "type": "string"
       },
+      "Body_create_gpt_image_job_api_v1_gpt_image_jobs_post": {
+        "properties": {
+          "aspectRatio": {
+            "$ref": "#/components/schemas/AspectRatio"
+          },
+          "count": {
+            "default": 1,
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "generate",
+            "enum": [
+              "generate",
+              "edit"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "moderation": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "low"
+            ],
+            "title": "Moderation",
+            "type": "string"
+          },
+          "prompt": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "quality": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "default": "none",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Reasoningeffort",
+            "type": "string"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "size": {
+            "default": "1024x1024",
+            "enum": [
+              "1024x1024",
+              "1024x1536",
+              "1536x1024"
+            ],
+            "title": "Size",
+            "type": "string"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ImageStyle"
+          },
+          "webSearch": {
+            "default": false,
+            "title": "Websearch",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspectRatio",
+          "style"
+        ],
+        "title": "Body_create_gpt_image_job_api_v1_gpt_image_jobs_post",
+        "type": "object"
+      },
       "Body_create_image_edit_job_api_v1_image_edit_jobs_post": {
         "properties": {
           "aspectRatio": {
@@ -130,12 +243,99 @@
         "title": "Body_create_image_edit_job_api_v1_image_edit_jobs_post",
         "type": "object"
       },
+      "CodexConnectionResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "disconnected",
+              "auth_missing",
+              "starting",
+              "connected",
+              "reauth_required",
+              "proxy_error"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "connected",
+          "message"
+        ],
+        "title": "CodexConnectionResponse",
+        "type": "object"
+      },
       "EditFitMode": {
         "enum": [
           "fit",
           "crop"
         ],
         "type": "string"
+      },
+      "GPTImageSettingsResponse": {
+        "properties": {
+          "count": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "moderation": {
+            "enum": [
+              "auto",
+              "low"
+            ],
+            "title": "Moderation",
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Reasoningeffort",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "string"
+          },
+          "webSearch": {
+            "title": "Websearch",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "quality",
+          "size",
+          "count",
+          "moderation",
+          "reasoningEffort",
+          "webSearch"
+        ],
+        "title": "GPTImageSettingsResponse",
+        "type": "object"
       },
       "HTTPValidationError": {
         "properties": {
@@ -621,6 +821,13 @@
       },
       "ImageJobResponse": {
         "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/ImageJobResult"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
           "completedAt": {
             "anyOf": [
               {
@@ -854,6 +1061,16 @@
               }
             ]
           },
+          "gpt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GPTImageSettingsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hasFaceReference": {
             "title": "Hasfacereference",
             "type": "boolean"
@@ -948,6 +1165,7 @@
           "queued",
           "uploading",
           "preparing",
+          "generating",
           "sampling",
           "saving",
           "completed",
@@ -967,7 +1185,8 @@
       "ImageProviderName": {
         "enum": [
           "demo",
-          "comfyui"
+          "comfyui",
+          "openai_oauth"
         ],
         "type": "string"
       },
@@ -1116,6 +1335,150 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/connections/codex": {
+      "delete": {
+        "operationId": "disconnect_connection_api_v1_connections_codex_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Disconnect Connection",
+        "tags": [
+          "owner codex connection"
+        ]
+      },
+      "get": {
+        "operationId": "get_connection_status_api_v1_connections_codex_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Connection Status",
+        "tags": [
+          "owner codex connection"
+        ]
+      }
+    },
+    "/api/v1/connections/codex/check": {
+      "post": {
+        "operationId": "check_connection_api_v1_connections_codex_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Connection",
+        "tags": [
+          "owner codex connection"
+        ]
+      }
+    },
+    "/api/v1/connections/codex/import": {
+      "post": {
+        "operationId": "import_connection_api_v1_connections_codex_import_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Import Connection",
+        "tags": [
+          "owner codex connection"
+        ]
+      }
+    },
+    "/api/v1/connections/codex/restart": {
+      "post": {
+        "operationId": "restart_connection_api_v1_connections_codex_restart_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Restart Connection",
+        "tags": [
+          "owner codex connection"
+        ]
+      }
+    },
+    "/api/v1/gpt-image-jobs": {
+      "post": {
+        "operationId": "create_gpt_image_job_api_v1_gpt_image_jobs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_gpt_image_job_api_v1_gpt_image_jobs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Gpt Image Job",
+        "tags": [
+          "owner gpt image jobs"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "health_api_v1_health_get",
@@ -1527,6 +1890,94 @@
         ]
       }
     },
+    "/api/v1/image-jobs/{job_id}/assets/{ordinal}/result": {
+      "get": {
+        "operationId": "get_image_job_asset_result_api_v1_image_jobs__job_id__assets__ordinal__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ordinal",
+            "required": true,
+            "schema": {
+              "title": "Ordinal",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job Asset Result",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}/assets/{ordinal}/thumbnail": {
+      "get": {
+        "operationId": "get_image_job_asset_thumbnail_api_v1_image_jobs__job_id__assets__ordinal__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ordinal",
+            "required": true,
+            "schema": {
+              "title": "Ordinal",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job Asset Thumbnail",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
     "/api/v1/image-jobs/{job_id}/events": {
       "get": {
         "operationId": "stream_image_job_api_v1_image_jobs__job_id__events_get",
@@ -1601,6 +2052,59 @@
           }
         },
         "summary": "Get Image Job Input",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}/inputs/{role}/{ordinal}": {
+      "get": {
+        "operationId": "get_image_job_input_ordinal_api_v1_image_jobs__job_id__inputs__role___ordinal__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "title": "Role",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ordinal",
+            "required": true,
+            "schema": {
+              "title": "Ordinal",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Image Job Input Ordinal",
         "tags": [
           "image jobs"
         ]

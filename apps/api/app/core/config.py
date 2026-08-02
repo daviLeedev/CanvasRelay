@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     comfyui_timeout_seconds: float = 30
     comfyui_max_result_bytes: int = 50 * 1024 * 1024
     comfyui_stalled_after_seconds: float = 90
+    codex_oauth_enabled: bool = False
+    codex_oauth_proxy_port: int = 18765
+    codex_oauth_proxy_command: Path | None = None
+    codex_oauth_timeout_seconds: float = 120.0
+    codex_oauth_parallel_jobs: int = 2
+    codex_oauth_daily_job_limit: int = 30
+    codex_oauth_ip_daily_job_limit: int = 10
+    codex_oauth_allow_remote_generation: bool = False
+    codex_oauth_allow_remote_management: bool = False
+    codex_oauth_allow_docker_gateway: bool = False
+    codex_oauth_model: str | None = None
     max_upload_bytes: int = 20 * 1024 * 1024
     data_dir: Path = Path(".canvasrelay")
     database_url: str | None = None
@@ -99,6 +110,10 @@ class Settings(BaseSettings):
     @property
     def upload_root(self) -> Path:
         return self.resolved_data_dir / "media" / "uploads"
+
+    @property
+    def resolved_codex_oauth_proxy_command(self) -> Path | None:
+        return self._resolve_repository_path(self.codex_oauth_proxy_command)
 
 
 @lru_cache

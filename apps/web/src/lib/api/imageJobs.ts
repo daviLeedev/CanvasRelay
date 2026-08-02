@@ -6,6 +6,7 @@ export type ImageJobCreate = components["schemas"]["ImageJobCreate"];
 export type ImageJobResponse = components["schemas"]["ImageJobResponse"];
 export type ImageJobListResponse = components["schemas"]["ImageJobListResponse"];
 type ImageEditRequestContract = components["schemas"]["Body_create_image_edit_job_api_v1_image_edit_jobs_post"];
+type GPTImageRequestContract = components["schemas"]["Body_create_gpt_image_job_api_v1_gpt_image_jobs_post"];
 export type ImageEditLoraSelection = components["schemas"]["LoraSelectionResponse"];
 export type ImageEditProviderOptions = components["schemas"]["ImageEditProviderOptionsResponse"];
 export type ImageGenerationProviderOptions = components["schemas"]["ImageGenerationProviderOptionsResponse"];
@@ -19,6 +20,13 @@ export type ImageEditJobCreate = Omit<ImageEditRequestContract, "source" | "face
   loras: ImageEditLoraSelection[];
 };
 
+export type OwnerConnection = components["schemas"]["CodexConnectionResponse"];
+export type OwnerConnectionState = OwnerConnection["state"];
+export type GPTImageJobInput = Omit<GPTImageRequestContract, "references"> & {
+  count: 1 | 2;
+  references: File[];
+};
+
 const jobStatuses = new Set<ImageJobResponse["status"]>([
   "queued",
   "running",
@@ -28,10 +36,10 @@ const jobStatuses = new Set<ImageJobResponse["status"]>([
 ]);
 const aspectRatios = new Set<ImageJobResponse["settings"]["aspectRatio"]>(["1:1", "4:3", "3:4", "16:9"]);
 const imageStyles = new Set<ImageJobResponse["settings"]["style"]>(["editorial", "product", "concept"]);
-const imageProviders = new Set<ImageJobResponse["settings"]["provider"]>(["demo", "comfyui"]);
+const imageProviders = new Set<string>(["demo", "comfyui", "openai_oauth"]);
 const imageOperations = new Set<ImageJobResponse["settings"]["operation"]>(["generate", "edit"]);
 const progressPhases = new Set<ImageJobResponse["phase"]>([
-  "queued", "uploading", "preparing", "sampling", "saving", "completed", "failed", "canceled",
+  "queued", "uploading", "preparing", "generating", "sampling", "saving", "completed", "failed", "canceled",
 ]);
 const progressSources = new Set<ImageJobResponse["progressSource"]>(["provider", "inferred", "unknown"]);
 const imageMimeTypes = new Set<NonNullable<ImageJobResponse["result"]>["mimeType"]>([
@@ -87,22 +95,41 @@ function isGenerationSettings(value: unknown): boolean {
   );
 }
 
+function isGPTSettings(value: unknown): boolean {
+  if (value == null) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value.quality === "auto" || value.quality === "low" || value.quality === "medium" || value.quality === "high") &&
+    typeof value.size === "string" &&
+    (value.moderation === "auto" || value.moderation === "low") &&
+    (value.reasoningEffort === "none" || value.reasoningEffort === "low" || value.reasoningEffort === "medium" || value.reasoningEffort === "high") &&
+    typeof value.webSearch === "boolean" &&
+    (value.count === 1 || value.count === 2)
+  );
+}
+
+function isResult(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.url === "string" &&
+    typeof value.thumbnailUrl === "string" &&
+    typeof value.mimeType === "string" &&
+    imageMimeTypes.has(value.mimeType as NonNullable<ImageJobResponse["result"]>["mimeType"]) &&
+    typeof value.width === "number" &&
+    typeof value.height === "number" &&
+    isNullableNumber(value.sizeBytes) &&
+    (value.sha256 === null || typeof value.sha256 === "string") &&
+    typeof value.available === "boolean";
+}
+
 export function parseImageJob(value: unknown): ImageJobResponse {
   if (!isRecord(value) || !isRecord(value.settings)) {
     throw new Error("Invalid image job response.");
   }
   const resultIsValid =
     value.result === null ||
-    (isRecord(value.result) &&
-      typeof value.result.url === "string" &&
-      typeof value.result.thumbnailUrl === "string" &&
-      typeof value.result.mimeType === "string" &&
-      imageMimeTypes.has(value.result.mimeType as NonNullable<ImageJobResponse["result"]>["mimeType"]) &&
-      typeof value.result.width === "number" &&
-      typeof value.result.height === "number" &&
-      isNullableNumber(value.result.sizeBytes) &&
-      (value.result.sha256 === null || typeof value.result.sha256 === "string") &&
-      typeof value.result.available === "boolean");
+    isResult(value.result);
+  const assetsAreValid = value.assets === undefined ||
+    (Array.isArray(value.assets) && value.assets.every(isResult));
   const settingsAreValid =
     typeof value.settings.aspectRatio === "string" &&
     aspectRatios.has(value.settings.aspectRatio as ImageJobResponse["settings"]["aspectRatio"]) &&
@@ -110,13 +137,14 @@ export function parseImageJob(value: unknown): ImageJobResponse {
     imageStyles.has(value.settings.style as ImageJobResponse["settings"]["style"]) &&
     typeof value.settings.seed === "number" &&
     typeof value.settings.provider === "string" &&
-    imageProviders.has(value.settings.provider as ImageJobResponse["settings"]["provider"]) &&
+    imageProviders.has(value.settings.provider) &&
     typeof value.settings.operation === "string" &&
     imageOperations.has(value.settings.operation as ImageJobResponse["settings"]["operation"]) &&
     typeof value.settings.hasFaceReference === "boolean" &&
     (value.settings.sourceJobId === null || typeof value.settings.sourceJobId === "string") &&
     isGenerationSettings(value.settings.generation) &&
-    isEditSettings(value.settings.edit);
+    isEditSettings(value.settings.edit) &&
+    isGPTSettings(value.settings.gpt);
   const progressIsValid =
     value.progress === null ||
     (typeof value.progress === "number" && value.progress >= 0 && value.progress <= 100);
@@ -150,6 +178,7 @@ export function parseImageJob(value: unknown): ImageJobResponse {
     !isNullableString(value.completedAt) ||
     !settingsAreValid ||
     !resultIsValid ||
+    !assetsAreValid ||
     !errorIsValid
   ) {
     throw new Error("Invalid image job response.");
@@ -217,6 +246,47 @@ export function createImageEditJob(input: ImageEditJobCreate): Promise<ImageJobR
   form.set("loras", JSON.stringify(input.loras));
   return requestImageJob("/api/v1/image-edit-jobs", { method: "POST", body: form });
 }
+
+export function createGPTImageJob(input: GPTImageJobInput): Promise<ImageJobResponse> {
+  const form = new FormData();
+  form.set("prompt", input.prompt);
+  form.set("aspectRatio", input.aspectRatio);
+  form.set("style", input.style);
+  form.set("mode", input.mode);
+  input.references.forEach((reference) => form.append("references", reference));
+  form.set("quality", input.quality);
+  form.set("size", input.size);
+  form.set("count", String(input.count));
+  form.set("moderation", input.moderation);
+  form.set("reasoningEffort", input.reasoningEffort);
+  form.set("webSearch", String(input.webSearch));
+  return requestImageJob("/api/v1/gpt-image-jobs", { method: "POST", body: form });
+}
+
+function isOwnerConnection(value: unknown): value is OwnerConnection {
+  return isRecord(value) &&
+    typeof value.state === "string" &&
+    ["disconnected", "auth_missing", "starting", "connected", "reauth_required", "proxy_error"].includes(value.state) &&
+    typeof value.connected === "boolean" &&
+    typeof value.message === "string";
+}
+
+async function requestOwnerConnection(path = "", init?: RequestInit): Promise<OwnerConnection> {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/connections/codex${path}`, {
+    ...init,
+    headers: { Accept: "application/json", ...init?.headers },
+  });
+  if (!response.ok) throw new Error("The local owner connection is unavailable.");
+  const payload: unknown = await response.json();
+  if (!isOwnerConnection(payload)) throw new Error("The local owner connection returned an invalid response.");
+  return payload;
+}
+
+export const fetchOwnerConnection = () => requestOwnerConnection();
+export const importOwnerConnection = () => requestOwnerConnection("/import", { method: "POST" });
+export const checkOwnerConnection = () => requestOwnerConnection("/check", { method: "POST" });
+export const restartOwnerConnection = () => requestOwnerConnection("/restart", { method: "POST" });
+export const disconnectOwnerConnection = () => requestOwnerConnection("", { method: "DELETE" });
 
 export async function fetchImageEditOptions(signal?: AbortSignal): Promise<ImageEditProviderOptions> {
   const response = await fetch(`${getApiBaseUrl()}/api/v1/providers/image-edit/options`, {
@@ -387,4 +457,12 @@ export function getImageThumbnailUrl(job: ImageJobResponse): string | null {
 
 export function getImageInputUrl(jobId: string, role: "source" | "identity"): string {
   return `${getApiBaseUrl()}/api/v1/image-jobs/${encodeURIComponent(jobId)}/inputs/${role}`;
+}
+
+export function getImageAssetUrls(job: ImageJobResponse): string[] {
+  const paths = job.assets?.map((asset) => asset.url) ?? [];
+  const fallback = job.result?.url ? [job.result.url] : [];
+  return (paths.length > 0 ? paths : fallback).flatMap((path) =>
+    path.startsWith(`/api/v1/image-jobs/${encodeURIComponent(job.id)}/`) ? [new URL(path, `${getApiBaseUrl()}/`).toString()] : [],
+  );
 }
