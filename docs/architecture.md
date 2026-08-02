@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | Draft |
 | Last updated | 2026-07-31 |
-| Related decision | [ADR 0001](adr/0001-nextjs-fastapi-monorepo.md) |
+| Related decisions | [ADR 0001](adr/0001-nextjs-fastapi-monorepo.md), [ADR 0002](adr/0002-postgres-filesystem-media.md) |
 
 ## 1. Architectural Goals
 
@@ -39,7 +39,7 @@ flowchart LR
     P --> MOCK["Deterministic mock provider"]
     P --> COMFY["Optional ComfyUI provider"]
     P --> CLOUD["Optional documented cloud providers"]
-    M --> DB["SQLite metadata repository"]
+    M --> DB["PostgreSQL metadata repository"]
     M --> FS["Filesystem media store"]
     COMFY --> INF["External image or video inference server"]
 ```
@@ -264,14 +264,23 @@ end-to-end tests.
 
 ## 9. Persistence
 
-- SQLite stores jobs, attempts, media metadata, presets, and provenance.
-- Binary image and video files use a `MediaStore` interface backed by the local
-  filesystem in the first release.
-- Filenames use generated IDs; user filenames are metadata only.
-- Writes use temporary files and atomic rename where supported.
-- The legacy JSON metadata importer is a migration utility, not a runtime
-  dependency.
-- Object storage can be added later without changing the media domain.
+- PostgreSQL is the metadata source of truth for Docker and hosted profiles.
+- SQLite implements the same repository contract for fast tests and optional
+  standalone local execution.
+- Binary image and video files are never stored in database binary columns.
+  A `MediaStore` interface owns them beneath `CANVASRELAY_DATA_DIR`.
+- Database rows contain relative storage keys, MIME type, dimensions, byte
+  length, SHA-256, provenance, and missing-file state. Personal absolute paths
+  are neither accepted from clients nor persisted.
+- Writes use temporary files and atomic rename. Existing files are not
+  overwritten when a generated identifier collides.
+- Library queries return 400px WebP thumbnails when conversion is available;
+  detail views request the original through conditional and range-aware file
+  responses.
+- Alembic owns relational schema changes. The idempotent SQLite importer keeps
+  identifiers, timestamps, source relationships, and missing-file records.
+- Object storage can replace the filesystem implementation later without
+  changing job or media contracts.
 
 ## 10. Security And Privacy
 
@@ -301,7 +310,7 @@ end-to-end tests.
 | Web units | Vitest, Testing Library | forms, reducers, mapping, error UI |
 | API units | Pytest | state transitions, adapters, repositories |
 | Contract | OpenAPI generation check | schema drift and error envelope |
-| Integration | Pytest with temporary SQLite/media root | jobs and persistence |
+| Integration | Pytest with SQLite and PostgreSQL/media roots | jobs, import, persistence |
 | End-to-end | Playwright with demo provider | create, cancel, retry, reuse |
 | Visual | Playwright screenshots and canvas checks | responsive 2D and 3D views |
 
@@ -309,7 +318,8 @@ end-to-end tests.
 
 ### Demo
 
-- Next.js, FastAPI, SQLite, filesystem media, deterministic mock provider.
+- Next.js, FastAPI, PostgreSQL in Compose (or SQLite standalone), filesystem
+  media, deterministic mock provider.
 - Starts without GPU, credentials, or model files.
 
 ### Local Inference

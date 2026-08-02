@@ -1,0 +1,15 @@
+{
+  "name": "@canvasrelay/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "types": "./src/schema.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/schema.d.ts"
+    }
+  },
+  "files": [
+    "openapi.json",
+    "src/schema.d.ts"
+  ]
+}

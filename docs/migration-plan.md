@@ -137,6 +137,9 @@ Deliverables:
 - Library filters, density control, selection/delete mode, and detail view.
 - Provenance including prompt, model, provider, parameters, references, and time.
 - Spatial compare as an optional view over the same asset selection model.
+- PostgreSQL metadata repository, Alembic migrations, and a durable filesystem
+  media store with thumbnails and conditional delivery.
+- Idempotent SQLite-to-PostgreSQL import with dry-run and checksum validation.
 
 Exit criteria:
 
@@ -145,6 +148,8 @@ Exit criteria:
 - Pagination never causes previously loaded assets to disappear incorrectly.
 - Delete removes selected metadata and owned files without touching uploads that
   are still referenced by other records.
+- API, database, and inference-provider restarts do not erase terminal jobs or
+  Library media.
 
 ### Phase 5: Video Generation Vertical Slice
 

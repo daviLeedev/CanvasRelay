@@ -1,0 +1,38 @@
+{
+  "name": "canvasrelay",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "concurrently --names web,api --prefix-colors blue,green \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev:web": "pnpm --filter @canvasrelay/web dev",
+    "dev:api": "uv run --directory apps/api uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "db:migrate": "uv run --directory apps/api alembic -c alembic.ini upgrade head",
+    "db:import-sqlite": "uv run --directory apps/api python -m app.cli.import_sqlite",
+    "lint": "pnpm lint:web && pnpm lint:api",
+    "lint:web": "pnpm --filter @canvasrelay/web lint",
+    "lint:api": "uv run --directory apps/api ruff check .",
+    "typecheck": "pnpm typecheck:web && pnpm typecheck:api",
+    "typecheck:web": "pnpm --filter @canvasrelay/web typecheck",
+    "typecheck:api": "uv run --directory apps/api mypy app tests",
+    "test": "pnpm test:web && pnpm test:api",
+    "test:web": "pnpm --filter @canvasrelay/web test",
+    "test:api": "uv run --directory apps/api pytest",
+    "test:e2e": "pnpm --filter @canvasrelay/web test:e2e",
+    "build": "pnpm --filter @canvasrelay/web build",
+    "contracts:export": "uv run --directory apps/api python -m app.openapi --output ../../packages/contracts/openapi.json",
+    "contracts:types": "openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.d.ts",
+    "contracts:generate": "pnpm contracts:export && pnpm contracts:types",
+    "contracts:check": "pnpm contracts:generate && git diff --exit-code -- packages/contracts",
+    "policy:check": "node scripts/check-repository.mjs",
+    "check": "pnpm policy:check && pnpm contracts:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.4",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}
