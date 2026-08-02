@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
@@ -15,7 +16,7 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.pool import StaticPool
 
@@ -109,6 +110,9 @@ def create_database_engine(
 ) -> Engine:
     options: dict[str, object] = {"pool_pre_ping": True}
     if database_url.startswith("sqlite"):
+        sqlite_path = make_url(database_url).database
+        if sqlite_path and sqlite_path != ":memory:":
+            Path(sqlite_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         options["connect_args"] = {"check_same_thread": False}
         if database_url in {"sqlite://", "sqlite+pysqlite://"} or ":memory:" in database_url:
             options["poolclass"] = StaticPool

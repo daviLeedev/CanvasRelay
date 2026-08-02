@@ -80,6 +80,24 @@ async function mockApiOnline(page: Page) {
       }),
     });
   });
+  await page.route("**/api/v1/providers/image/options", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        samplers: ["euler"],
+        schedulers: ["simple"],
+        loras: [],
+        defaults: {
+          steps: 8,
+          cfg: 1,
+          shift: 3.1,
+          sampler: "euler",
+          scheduler: "simple",
+        },
+      }),
+    });
+  });
   await page.route("**/api/v1/image-jobs?*", async (route) => {
     await route.fulfill({
       status: 200,
@@ -111,12 +129,22 @@ async function mockPersistentImageApi(page: Page) {
     contentType: "application/json",
     body: JSON.stringify({ items: [completedImageJob], nextCursor: null }),
   }));
+  await page.route("**/api/v1/image-jobs/tags", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ tags: [] }),
+  }));
   await page.route("**/api/v1/image-jobs/img_e2e_complete", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify(completedImageJob),
   }));
   await page.route("**/api/v1/image-jobs/img_e2e_complete/result", (route) => route.fulfill({
+    status: 200,
+    contentType: "image/svg+xml",
+    body: resultSvg,
+  }));
+  await page.route("**/api/v1/image-jobs/img_e2e_complete/thumbnail", (route) => route.fulfill({
     status: 200,
     contentType: "image/svg+xml",
     body: resultSvg,

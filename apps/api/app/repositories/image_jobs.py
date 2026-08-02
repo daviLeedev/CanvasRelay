@@ -66,8 +66,6 @@ class ImageJobRepository:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._lock = RLock()
         resolved_url = database_url or self._sqlite_url(database_path)
-        if database_url is None and database_path != ":memory:":
-            Path(database_path).parent.mkdir(parents=True, exist_ok=True)
         self.engine = engine or create_database_engine(
             resolved_url,
             pool_size=pool_size,

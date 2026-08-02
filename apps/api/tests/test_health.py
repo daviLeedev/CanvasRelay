@@ -46,6 +46,22 @@ def test_health_reflects_demo_mode_configuration(tmp_path: Path) -> None:
     assert response.json()["demoMode"] is False
 
 
+def test_app_creates_a_missing_data_directory_before_opening_sqlite(tmp_path: Path) -> None:
+    data_dir = tmp_path / "fresh" / "nested" / "data"
+    settings = Settings(env="test", demo_mode=True, data_dir=data_dir)
+
+    assert not data_dir.exists()
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert settings.database_path.is_file()
+    assert settings.media_root.is_dir()
+    assert settings.thumbnail_root.is_dir()
+    assert settings.upload_root.is_dir()
+
+
 def test_cors_allows_the_configured_web_origin(tmp_path: Path) -> None:
     origin = "http://localhost:3000"
     client = make_client(Settings(env="test", cors_origins=origin), tmp_path)
