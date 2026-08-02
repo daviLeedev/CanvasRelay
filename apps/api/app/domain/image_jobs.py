@@ -136,6 +136,7 @@ class ImageJobRecord:
     result_sha256: str | None = None
     result_missing: bool = False
     provider_metadata: dict[str, object] | None = None
+    tags: tuple[str, ...] = ()
     error: ProviderErrorDetails | None = None
 
 

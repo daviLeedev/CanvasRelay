@@ -36,7 +36,7 @@ from app.domain.image_jobs import (
     normalize_prompt,
     resolve_seed,
 )
-from app.repositories.database import Base, ImageJobRow, create_database_engine
+from app.repositories.database import Base, ImageJobRow, ImageJobTagRow, create_database_engine
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "canceled"})
 
@@ -66,8 +66,6 @@ class ImageJobRepository:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._lock = RLock()
         resolved_url = database_url or self._sqlite_url(database_path)
-        if database_url is None and database_path != ":memory:":
-            Path(database_path).parent.mkdir(parents=True, exist_ok=True)
         self.engine = engine or create_database_engine(
             resolved_url,
             pool_size=pool_size,
@@ -169,8 +167,16 @@ class ImageJobRepository:
         limit: int = 24,
         status: ImageJobStatus | None = None,
         operation: ImageJobOperation | None = None,
+        search: str | None = None,
+        tag: str | None = None,
     ) -> list[ImageJobRecord]:
-        records, _ = self.list_page(limit=limit, status=status, operation=operation)
+        records, _ = self.list_page(
+            limit=limit,
+            status=status,
+            operation=operation,
+            search=search,
+            tag=tag,
+        )
         return records
 
     def list_page(
@@ -179,6 +185,8 @@ class ImageJobRepository:
         limit: int = 24,
         status: ImageJobStatus | None = None,
         operation: ImageJobOperation | None = None,
+        search: str | None = None,
+        tag: str | None = None,
         cursor: str | None = None,
     ) -> tuple[list[ImageJobRecord], str | None]:
         bounded_limit = max(1, min(limit, 100))
@@ -187,6 +195,18 @@ class ImageJobRepository:
             statement = statement.where(ImageJobRow.status == status)
         if operation is not None:
             statement = statement.where(ImageJobRow.operation == operation)
+        normalized_search = normalize_prompt(search or "")
+        if normalized_search:
+            statement = statement.where(
+                ImageJobRow.prompt.contains(normalized_search, autoescape=True)
+            )
+        normalized_tag = (tag or "").strip().casefold()
+        if normalized_tag:
+            statement = statement.where(
+                ImageJobRow.id.in_(
+                    select(ImageJobTagRow.job_id).where(ImageJobTagRow.tag == normalized_tag)
+                )
+            )
         if cursor is not None:
             created_at, job_id = self._decode_cursor(cursor)
             statement = statement.where(
@@ -213,12 +233,54 @@ class ImageJobRepository:
             statement = select(ImageJobRow.id).where(ImageJobRow.source_job_id == job_id).limit(1)
             return session.scalar(statement) is not None
 
+    def has_dependents_outside(self, job_id: str, selected_ids: set[str]) -> bool:
+        with self._sessions() as session:
+            statement = (
+                select(ImageJobRow.id)
+                .where(
+                    ImageJobRow.source_job_id == job_id,
+                    ImageJobRow.id.not_in(selected_ids),
+                )
+                .limit(1)
+            )
+            return session.scalar(statement) is not None
+
     def delete(self, job_id: str) -> None:
         with self._lock, self._sessions.begin() as session:
             row = session.get(ImageJobRow, job_id)
             if row is None:
                 raise ImageJobNotFoundError(job_id)
             session.delete(row)
+
+    def delete_many(self, job_ids: list[str]) -> None:
+        with self._lock, self._sessions.begin() as session:
+            rows = [session.get(ImageJobRow, job_id) for job_id in job_ids]
+            missing = next(
+                (
+                    job_id
+                    for job_id, row in zip(job_ids, rows, strict=True)
+                    if row is None
+                ),
+                None,
+            )
+            if missing is not None:
+                raise ImageJobNotFoundError(missing)
+            for row in rows:
+                if row is not None:
+                    session.delete(row)
+
+    def update_tags(self, job_id: str, tags: tuple[str, ...]) -> ImageJobRecord:
+        with self._lock, self._sessions.begin() as session:
+            row = session.get(ImageJobRow, job_id)
+            if row is None:
+                raise ImageJobNotFoundError(job_id)
+            row.tags = [ImageJobTagRow(tag=tag) for tag in sorted(set(tags))]
+        return self.get(job_id)
+
+    def list_tags(self) -> list[str]:
+        with self._sessions() as session:
+            statement = select(ImageJobTagRow.tag).distinct().order_by(ImageJobTagRow.tag)
+            return list(session.scalars(statement))
 
     def list_active(self) -> list[ImageJobRecord]:
         statement = (
@@ -443,6 +505,10 @@ class ImageJobRepository:
         row.error_message = error.message if error else None
         row.error_action = error.action if error else None
         row.error_retryable = error.retryable if error else None
+        current_tags = tuple(item.tag for item in row.tags)
+        normalized_tags = tuple(sorted(set(record.tags)))
+        if current_tags != normalized_tags:
+            row.tags = [ImageJobTagRow(tag=tag) for tag in normalized_tags]
         row.updated_at = self.now()
 
     @staticmethod
@@ -506,6 +572,7 @@ class ImageJobRepository:
             result_sha256=row.result_sha256,
             result_missing=row.result_missing,
             provider_metadata=cast(dict[str, object] | None, row.provider_metadata_json),
+            tags=tuple(item.tag for item in row.tags),
             error=error,
         )
 

@@ -4,12 +4,15 @@ import {
   createImageEditJob,
   createImageJob,
   deleteImageJobAsset,
+  deleteImageJobAssets,
   fetchImageEditOptions,
   fetchImageGenerationOptions,
   fetchImageJob,
   fetchImageJobPage,
+  fetchImageJobTags,
   fetchImageJobs,
   subscribeImageJob,
+  updateImageJobTags,
 } from "./imageJobs";
 
 const queuedJob = {
@@ -23,6 +26,7 @@ const queuedJob = {
   stalled: false,
   estimatedRemainingSeconds: null,
   prompt: "A structured studio still",
+  tags: [],
   settings: {
     aspectRatio: "4:3",
     style: "editorial",
@@ -213,6 +217,34 @@ describe("image job API client", () => {
     await expect(fetchImageJobPage({ limit: 1 })).resolves.toMatchObject({ nextCursor: "page-two" });
     await expect(deleteImageJobAsset("img_demo")).resolves.toBeUndefined();
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "DELETE" });
+  });
+
+  it("updates tags, lists tags, and deletes selected assets", async () => {
+    const taggedJob = { ...queuedJob, status: "completed", tags: ["review"] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(taggedJob), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ tags: ["review"] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ deletedIds: [queuedJob.id] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateImageJobTags(queuedJob.id, ["review"])).resolves.toMatchObject({
+      tags: ["review"],
+    });
+    await expect(fetchImageJobTags()).resolves.toEqual(["review"]);
+    await expect(deleteImageJobAssets([queuedJob.id])).resolves.toEqual([queuedJob.id]);
+
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "PATCH" });
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: "POST" });
   });
 
   it("streams typed job updates and closes the subscription", () => {

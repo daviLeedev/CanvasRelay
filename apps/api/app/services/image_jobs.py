@@ -173,6 +173,8 @@ class ImageJobService:
         limit: int = 24,
         status: ImageJobStatus | None = None,
         operation: ImageJobOperation | None = None,
+        search: str | None = None,
+        tag: str | None = None,
     ) -> list[ImageJobRecord]:
         if status is not None:
             for active_record in self.repository.list_active():
@@ -180,7 +182,13 @@ class ImageJobService:
                     await self.get(active_record.id)
                 except ImageProviderError:
                     self.repository.mark_stalled(active_record.id)
-        records = self.repository.list_recent(limit=limit, status=status, operation=operation)
+        records = self.repository.list_recent(
+            limit=limit,
+            status=status,
+            operation=operation,
+            search=search,
+            tag=tag,
+        )
         refreshed: list[ImageJobRecord] = []
         for record in records:
             if record.status in TERMINAL_STATUSES:
@@ -198,14 +206,24 @@ class ImageJobService:
         limit: int = 24,
         status: ImageJobStatus | None = None,
         operation: ImageJobOperation | None = None,
+        search: str | None = None,
+        tag: str | None = None,
         cursor: str | None = None,
     ) -> tuple[list[ImageJobRecord], str | None]:
         if cursor is None:
-            records = await self.list_recent(limit=limit, status=status, operation=operation)
+            records = await self.list_recent(
+                limit=limit,
+                status=status,
+                operation=operation,
+                search=search,
+                tag=tag,
+            )
             _, next_cursor = self.repository.list_page(
                 limit=limit,
                 status=status,
                 operation=operation,
+                search=search,
+                tag=tag,
             )
             return records, next_cursor
 
@@ -213,6 +231,8 @@ class ImageJobService:
             limit=limit,
             status=status,
             operation=operation,
+            search=search,
+            tag=tag,
             cursor=cursor,
         )
         refreshed: list[ImageJobRecord] = []
@@ -315,27 +335,44 @@ class ImageJobService:
         return self.repository.apply_snapshot(job_id, snapshot)
 
     def delete_asset(self, job_id: str) -> None:
-        record = self.repository.get(job_id)
-        if record.status != "completed" or record.result_path is None:
-            raise ImageProviderError(self._asset_not_deletable_error())
-        if self.repository.has_dependents(job_id):
-            raise ImageProviderError(self._asset_in_use_error())
+        self.delete_assets([job_id])
 
+    def delete_assets(self, job_ids: list[str]) -> list[str]:
+        unique_ids = list(dict.fromkeys(job_ids))
+        records = [self.repository.get(job_id) for job_id in unique_ids]
+        selected_ids = set(unique_ids)
+        for record in records:
+            if record.status != "completed" or record.result_path is None:
+                raise ImageProviderError(self._asset_not_deletable_error())
+            if self.repository.has_dependents_outside(record.id, selected_ids):
+                raise ImageProviderError(self._asset_in_use_error())
         staged: list[StagedFileDeletion | None] = []
         try:
-            staged.append(self.media_store.stage_delete(record.result_path))
-            staged.append(self.media_store.stage_thumbnail_delete(record.thumbnail_path))
-            if record.source_path is not None:
-                staged.append(self.upload_store.stage_delete(record.source_path))
-            if record.face_reference_path is not None:
-                staged.append(self.upload_store.stage_delete(record.face_reference_path))
-            self.repository.delete(job_id)
+            for record in records:
+                assert record.result_path is not None
+                staged.append(self.media_store.stage_delete(record.result_path))
+                staged.append(self.media_store.stage_thumbnail_delete(record.thumbnail_path))
+                if record.source_path is not None:
+                    staged.append(self.upload_store.stage_delete(record.source_path))
+                if record.face_reference_path is not None:
+                    staged.append(self.upload_store.stage_delete(record.face_reference_path))
+            self.repository.delete_many(unique_ids)
         except Exception as error:
             for item in reversed(staged):
                 FilesystemMediaStore.restore_delete(item)
             raise ImageProviderError(self._asset_delete_failed_error()) from error
         for item in staged:
             FilesystemMediaStore.finalize_delete(item)
+        return unique_ids
+
+    def update_tags(self, job_id: str, tags: tuple[str, ...]) -> ImageJobRecord:
+        record = self.repository.get(job_id)
+        if record.status != "completed":
+            raise ImageProviderError(self._asset_not_deletable_error())
+        return self.repository.update_tags(job_id, tags)
+
+    def list_tags(self) -> list[str]:
+        return self.repository.list_tags()
 
     async def collect(self, job_id: str) -> ProviderContent:
         record = await self.get(job_id)

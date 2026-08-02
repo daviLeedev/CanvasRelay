@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
@@ -15,8 +16,8 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.pool import StaticPool
 
 
@@ -71,6 +72,12 @@ class ImageJobRow(Base):
     error_action: Mapped[str | None] = mapped_column(Text)
     error_retryable: Mapped[bool | None] = mapped_column(Boolean)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    tags: Mapped[list[ImageJobTagRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ImageJobTagRow.tag",
+    )
 
     __table_args__ = (
         Index("ix_image_jobs_created", created_at.desc(), id.desc()),
@@ -81,6 +88,20 @@ class ImageJobRow(Base):
     )
 
 
+class ImageJobTagRow(Base):
+    __tablename__ = "image_job_tags"
+
+    job_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("image_jobs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tag: Mapped[str] = mapped_column(String(48), primary_key=True)
+    job: Mapped[ImageJobRow] = relationship(back_populates="tags")
+
+    __table_args__ = (Index("ix_image_job_tags_tag_job", tag, job_id),)
+
+
 def create_database_engine(
     database_url: str,
     *,
@@ -89,6 +110,9 @@ def create_database_engine(
 ) -> Engine:
     options: dict[str, object] = {"pool_pre_ping": True}
     if database_url.startswith("sqlite"):
+        sqlite_path = make_url(database_url).database
+        if sqlite_path and sqlite_path != ":memory:":
+            Path(sqlite_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         options["connect_args"] = {"check_same_thread": False}
         if database_url in {"sqlite://", "sqlite+pysqlite://"} or ":memory:" in database_url:
             options["poolclass"] = StaticPool

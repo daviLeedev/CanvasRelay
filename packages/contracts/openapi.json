@@ -477,6 +477,40 @@
         "title": "ImageGenerationSettingsResponse",
         "type": "object"
       },
+      "ImageJobBatchDelete": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "ImageJobBatchDelete",
+        "type": "object"
+      },
+      "ImageJobBatchDeleteResponse": {
+        "properties": {
+          "deletedIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deletedids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deletedIds"
+        ],
+        "title": "ImageJobBatchDeleteResponse",
+        "type": "object"
+      },
       "ImageJobCreate": {
         "properties": {
           "aspectRatio": {
@@ -697,6 +731,13 @@
           "status": {
             "$ref": "#/components/schemas/ImageJobStatus"
           },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
           "totalSteps": {
             "anyOf": [
               {
@@ -862,6 +903,36 @@
           "canceled"
         ],
         "type": "string"
+      },
+      "ImageJobTagListResponse": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tags"
+        ],
+        "title": "ImageJobTagListResponse",
+        "type": "object"
+      },
+      "ImageJobTagsUpdate": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "ImageJobTagsUpdate",
+        "type": "object"
       },
       "ImageMimeType": {
         "enum": [
@@ -1157,6 +1228,42 @@
           },
           {
             "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 48,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
@@ -1236,6 +1343,68 @@
           }
         },
         "summary": "Create Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/assets/delete": {
+      "post": {
+        "operationId": "delete_image_job_assets_api_v1_image_jobs_assets_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageJobBatchDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobBatchDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Image Job Assets",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/tags": {
+      "get": {
+        "operationId": "list_image_job_tags_api_v1_image_jobs_tags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobTagListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Image Job Tags",
         "tags": [
           "image jobs"
         ]
@@ -1509,6 +1678,58 @@
           }
         },
         "summary": "Retry Image Job",
+        "tags": [
+          "image jobs"
+        ]
+      }
+    },
+    "/api/v1/image-jobs/{job_id}/tags": {
+      "patch": {
+        "operationId": "update_image_job_tags_api_v1_image_jobs__job_id__tags_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageJobTagsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Image Job Tags",
         "tags": [
           "image jobs"
         ]
