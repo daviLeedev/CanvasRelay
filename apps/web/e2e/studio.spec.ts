@@ -293,6 +293,7 @@ test("mock jobs transition and demo restart restores the initial state", async (
 
 test("API failure is distinct and recovers through the inspector retry", async ({ page }) => {
   const consoleErrors = collectConsoleErrors(page);
+  await mockApiOnline(page);
   await page.route("**/api/v1/health", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "{" }),
   );
