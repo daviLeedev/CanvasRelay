@@ -5,6 +5,7 @@ import {
   createImageJob,
   deleteImageJobAsset,
   fetchImageEditOptions,
+  fetchImageGenerationOptions,
   fetchImageJob,
   fetchImageJobPage,
   fetchImageJobs,
@@ -168,6 +169,20 @@ describe("image job API client", () => {
     ));
 
     await expect(fetchImageEditOptions()).resolves.toEqual(options);
+  });
+
+  it("loads provider-owned generation options", async () => {
+    const options = {
+      samplers: ["euler"],
+      schedulers: ["beta"],
+      loras: [{ id: "detail", label: "Detail enhancement" }],
+      defaults: { steps: 8, cfg: 1, shift: 5, sampler: "euler", scheduler: "beta" },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(options), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+
+    await expect(fetchImageGenerationOptions()).resolves.toEqual(options);
   });
 
   it("loads and validates the persistent job list", async () => {

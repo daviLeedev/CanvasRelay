@@ -9,6 +9,7 @@ from app.domain.image_jobs import (
     AspectRatio,
     ImageEditSettings,
     ImageGenerationRequest,
+    ImageGenerationSettings,
     ImageJobOperation,
     ImageJobRecord,
     ImageJobStatus,
@@ -22,6 +23,7 @@ from app.domain.image_jobs import (
 from app.providers.base import (
     ImageEditProviderOptions,
     ImageGenerationProvider,
+    ImageGenerationProviderOptions,
     ImageProviderError,
     ProviderDescriptor,
 )
@@ -64,6 +66,9 @@ class ImageJobService:
     async def describe_edit_options(self) -> ImageEditProviderOptions:
         return await self.provider.describe_edit_options()
 
+    async def describe_generation_options(self) -> ImageGenerationProviderOptions:
+        return await self.provider.describe_generation_options()
+
     async def create(
         self,
         *,
@@ -71,6 +76,7 @@ class ImageJobService:
         aspect_ratio: AspectRatio,
         style: ImageStyle,
         seed: int | None,
+        generation_settings: ImageGenerationSettings,
     ) -> ImageJobRecord:
         record = self.repository.create(
             prompt=prompt,
@@ -78,6 +84,7 @@ class ImageJobService:
             style=style,
             seed=seed,
             provider=self.provider.name,
+            generation_settings=generation_settings,
         )
         request = self._request(record)
         try:
@@ -268,6 +275,7 @@ class ImageJobService:
                 aspect_ratio=record.aspect_ratio,
                 style=record.style,
                 seed=record.seed,
+                generation_settings=record.generation_settings or ImageGenerationSettings(),
             )
 
         if record.edit_settings is None or record.source_path is None:
@@ -447,6 +455,7 @@ class ImageJobService:
             style=record.style,
             seed=record.seed,
             created_at=record.created_at,
+            generation_settings=record.generation_settings,
             edit_settings=record.edit_settings,
         )
 

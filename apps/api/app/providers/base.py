@@ -37,6 +37,18 @@ class ImageEditProviderOptions:
     default_cfg: float = 1.0
 
 
+@dataclass(frozen=True, slots=True)
+class ImageGenerationProviderOptions:
+    samplers: tuple[str, ...]
+    schedulers: tuple[str, ...]
+    loras: tuple[LoraOption, ...]
+    default_sampler: str = "euler"
+    default_scheduler: str = "beta"
+    default_steps: int = 8
+    default_cfg: float = 1.0
+    default_shift: float = 5.0
+
+
 class ImageProviderError(RuntimeError):
     def __init__(self, details: ProviderErrorDetails) -> None:
         super().__init__(details.message)
@@ -51,6 +63,8 @@ class ImageGenerationProvider(Protocol):
     async def describe_edit(self) -> ProviderDescriptor: ...
 
     async def describe_edit_options(self) -> ImageEditProviderOptions: ...
+
+    async def describe_generation_options(self) -> ImageGenerationProviderOptions: ...
 
     async def submit(self, request: ImageGenerationRequest) -> str: ...
 

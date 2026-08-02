@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchImageEditOptions } from "./imageJobs";
+import { fetchImageEditOptions, fetchImageGenerationOptions } from "./imageJobs";
 import { fetchImageEditProvider, fetchImageProvider } from "./imageProvider";
 
 export function useImageProviderQuery() {
@@ -19,6 +19,15 @@ export function useImageEditOptionsQuery() {
   return useQuery({
     queryKey: ["image-edit-options"],
     queryFn: ({ signal }) => fetchImageEditOptions(signal),
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useImageGenerationOptionsQuery() {
+  return useQuery({
+    queryKey: ["image-generation-options"],
+    queryFn: ({ signal }) => fetchImageGenerationOptions(signal),
     staleTime: 30_000,
     retry: 1,
   });

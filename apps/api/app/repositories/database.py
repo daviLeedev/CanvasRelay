@@ -43,6 +43,7 @@ class ImageJobRow(Base):
         ForeignKey("image_jobs.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
     )
     face_reference_path: Mapped[str | None] = mapped_column(Text)
+    generation_settings_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     edit_settings_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     provider_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

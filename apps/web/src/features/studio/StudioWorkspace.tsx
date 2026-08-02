@@ -10,7 +10,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useHealthQuery } from "@/lib/api/useHealthQuery";
-import { useImageProviderQuery } from "@/lib/api/useImageProviderQuery";
+import { useImageGenerationOptionsQuery, useImageProviderQuery } from "@/lib/api/useImageProviderQuery";
 
 import { StudioStage2D } from "./StudioStage2D";
 import { RecentImageJobs } from "./RecentImageJobs";
@@ -44,9 +44,12 @@ const statusTone: Record<JobStatus, "success" | "warning" | "neutral" | "danger"
 
 function formatStartedAt(startedAt: Date | null) {
   if (!startedAt) return "Not started";
-  return new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(
-    startedAt,
-  );
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: "UTC",
+  }).format(startedAt);
 }
 
 function ApiToolbarStatus() {
@@ -62,6 +65,7 @@ export function StudioWorkspace() {
   const { jobs: sampleJobs, restart } = useDemoJobs();
   const imageGeneration = useImageGenerationJob();
   const imageProvider = useImageProviderQuery();
+  const generationOptions = useImageGenerationOptionsQuery();
   const { mode, setMode } = useDisplayPreference();
   const reducedMotion = useReducedMotion();
   const pageVisible = usePageVisibility();
@@ -161,6 +165,7 @@ export function StudioWorkspace() {
             hasError={imageGeneration.hasError}
             canRetry={imageGeneration.canRetry}
             provider={imageProvider.data ?? null}
+            options={generationOptions.data ?? null}
             providerStatusUnavailable={imageProvider.isError}
             onSubmit={submitImageJob}
             onCancel={imageGeneration.cancel}

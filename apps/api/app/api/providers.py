@@ -7,6 +7,8 @@ from app.api.schemas import (
     ImageEditLoraOption,
     ImageEditOptionDefaults,
     ImageEditProviderOptionsResponse,
+    ImageGenerationOptionDefaults,
+    ImageGenerationProviderOptionsResponse,
     ImageProviderResponse,
 )
 from app.services.image_jobs import ImageJobService
@@ -54,6 +56,25 @@ async def get_image_edit_options(
         defaults=ImageEditOptionDefaults(
             steps=options.default_steps,
             cfg=options.default_cfg,
+            sampler=options.default_sampler,
+            scheduler=options.default_scheduler,
+        ),
+    )
+
+
+@router.get("/image/options", response_model=ImageGenerationProviderOptionsResponse)
+async def get_image_generation_options(
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> ImageGenerationProviderOptionsResponse:
+    options = await service.describe_generation_options()
+    return ImageGenerationProviderOptionsResponse(
+        samplers=list(options.samplers),
+        schedulers=list(options.schedulers),
+        loras=[ImageEditLoraOption(id=item.id, label=item.label) for item in options.loras],
+        defaults=ImageGenerationOptionDefaults(
+            steps=options.default_steps,
+            cfg=options.default_cfg,
+            shift=options.default_shift,
             sampler=options.default_sampler,
             scheduler=options.default_scheduler,
         ),

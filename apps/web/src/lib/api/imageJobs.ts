@@ -8,6 +8,7 @@ export type ImageJobListResponse = components["schemas"]["ImageJobListResponse"]
 type ImageEditRequestContract = components["schemas"]["Body_create_image_edit_job_api_v1_image_edit_jobs_post"];
 export type ImageEditLoraSelection = components["schemas"]["LoraSelectionResponse"];
 export type ImageEditProviderOptions = components["schemas"]["ImageEditProviderOptionsResponse"];
+export type ImageGenerationProviderOptions = components["schemas"]["ImageGenerationProviderOptionsResponse"];
 export type ImageEditJobCreate = Omit<ImageEditRequestContract, "source" | "faceReference" | "loras"> & {
   source?: File;
   sourceJobId?: string;
@@ -67,6 +68,22 @@ function isEditSettings(value: unknown): boolean {
   );
 }
 
+function isGenerationSettings(value: unknown): boolean {
+  if (value == null) return true;
+  if (!isRecord(value) || !Array.isArray(value.loras)) return false;
+  return (
+    typeof value.steps === "number" &&
+    typeof value.cfg === "number" &&
+    typeof value.shift === "number" &&
+    typeof value.sampler === "string" &&
+    typeof value.scheduler === "string" &&
+    value.loras.every(
+      (item) => isRecord(item) && typeof item.id === "string" &&
+        typeof item.modelWeight === "number" && typeof item.clipWeight === "number",
+    )
+  );
+}
+
 export function parseImageJob(value: unknown): ImageJobResponse {
   if (!isRecord(value) || !isRecord(value.settings)) {
     throw new Error("Invalid image job response.");
@@ -95,6 +112,7 @@ export function parseImageJob(value: unknown): ImageJobResponse {
     imageOperations.has(value.settings.operation as ImageJobResponse["settings"]["operation"]) &&
     typeof value.settings.hasFaceReference === "boolean" &&
     (value.settings.sourceJobId === null || typeof value.settings.sourceJobId === "string") &&
+    isGenerationSettings(value.settings.generation) &&
     isEditSettings(value.settings.edit);
   const progressIsValid =
     value.progress === null ||
@@ -206,6 +224,22 @@ export async function fetchImageEditOptions(signal?: AbortSignal): Promise<Image
     throw new Error("The image edit options response is invalid.");
   }
   return payload as ImageEditProviderOptions;
+}
+
+export async function fetchImageGenerationOptions(
+  signal?: AbortSignal,
+): Promise<ImageGenerationProviderOptions> {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/providers/image/options`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) throw new Error("Image generation options are unavailable.");
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || !isRecord(payload.defaults) || !Array.isArray(payload.samplers) ||
+      !Array.isArray(payload.schedulers) || !Array.isArray(payload.loras)) {
+    throw new Error("The image generation options response is invalid.");
+  }
+  return payload as ImageGenerationProviderOptions;
 }
 
 export function fetchImageJob(jobId: string, signal?: AbortSignal): Promise<ImageJobResponse> {

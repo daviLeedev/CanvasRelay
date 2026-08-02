@@ -22,6 +22,7 @@ from app.domain.image_jobs import (
     ImageMimeType,
     ImageProgressPhase,
     ImageProviderName,
+    LoraSelection,
     ProviderContent,
     ProviderErrorDetails,
     ProviderResult,
@@ -30,6 +31,7 @@ from app.domain.image_jobs import (
 )
 from app.providers.base import (
     ImageEditProviderOptions,
+    ImageGenerationProviderOptions,
     ImageProviderError,
     LoraOption,
     ProviderDescriptor,
@@ -165,6 +167,28 @@ class ComfyUIImageProvider:
             loras=loras,
             default_sampler="euler" if "euler" in samplers else samplers[0],
             default_scheduler="simple" if "simple" in schedulers else schedulers[0],
+        )
+
+    async def describe_generation_options(self) -> ImageGenerationProviderOptions:
+        samplers: tuple[str, ...] = ("euler",)
+        schedulers: tuple[str, ...] = ("beta",)
+        try:
+            response = await self._request("GET", "/object_info/KSamplerAdvanced")
+            payload = response.json()
+            node = payload.get("KSamplerAdvanced") if isinstance(payload, Mapping) else None
+            inputs = node.get("input") if isinstance(node, Mapping) else None
+            required = inputs.get("required") if isinstance(inputs, Mapping) else None
+            samplers = self._option_values(required, "sampler_name") or samplers
+            schedulers = self._option_values(required, "scheduler") or schedulers
+        except (ImageProviderError, ValueError, json.JSONDecodeError):
+            pass
+        loras = tuple(LoraOption(item.id, item.label) for item in self._load_lora_allowlist())
+        return ImageGenerationProviderOptions(
+            samplers=samplers,
+            schedulers=schedulers,
+            loras=loras,
+            default_sampler="euler" if "euler" in samplers else samplers[0],
+            default_scheduler="beta" if "beta" in schedulers else schedulers[0],
         )
 
     async def submit(self, request: ImageGenerationRequest) -> str:
@@ -661,7 +685,12 @@ class ComfyUIImageProvider:
                     False,
                 )
             )
-        return cast(dict[str, Any], bound)
+        typed_bound = cast(dict[str, Any], bound)
+        self._apply_generation_controls(typed_bound, request)
+        settings = request.generation_settings
+        if settings is not None:
+            self._apply_lora_chain(typed_bound, settings.loras)
+        return typed_bound
 
     def _bind_edit_workflow(
         self,
@@ -718,8 +747,37 @@ class ComfyUIImageProvider:
             )
         typed_bound = cast(dict[str, Any], bound)
         self._apply_edit_controls(typed_bound, request)
-        self._apply_lora_chain(typed_bound, request)
+        settings = request.edit_settings
+        if settings is not None:
+            self._apply_lora_chain(typed_bound, settings.loras)
         return typed_bound
+
+    def _apply_generation_controls(
+        self,
+        workflow: dict[str, Any],
+        request: ImageGenerationRequest,
+    ) -> None:
+        settings = request.generation_settings
+        if settings is None:
+            return
+        for node in workflow.values():
+            if not isinstance(node, dict):
+                continue
+            class_type = node.get("class_type")
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            if class_type in {"KSampler", "KSamplerAdvanced"}:
+                inputs.update(
+                    {
+                        "steps": settings.steps,
+                        "cfg": settings.cfg,
+                        "sampler_name": settings.sampler,
+                        "scheduler": settings.scheduler,
+                    }
+                )
+            if class_type == "ModelSamplingAuraFlow":
+                inputs["shift"] = settings.shift
 
     def _apply_edit_controls(
         self,
@@ -749,14 +807,13 @@ class ComfyUIImageProvider:
     def _apply_lora_chain(
         self,
         workflow: dict[str, Any],
-        request: ImageGenerationRequest,
+        selections: tuple[LoraSelection, ...],
     ) -> None:
-        settings = request.edit_settings
-        if settings is None or not settings.loras:
+        if not selections:
             return
         allowlist = {item.id: item for item in self._load_lora_allowlist()}
         selected = []
-        for selection in settings.loras:
+        for selection in selections:
             entry = allowlist.get(selection.id)
             if entry is None:
                 raise self._unsupported_options_error()
@@ -766,7 +823,7 @@ class ComfyUIImageProvider:
             inputs
             for node in workflow.values()
             if isinstance(node, dict)
-            and node.get("class_type") == "KSampler"
+            and node.get("class_type") in {"KSampler", "KSamplerAdvanced"}
             and isinstance((inputs := node.get("inputs")), dict)
             and self._is_node_link(inputs.get("model"))
         ]
@@ -846,7 +903,7 @@ class ComfyUIImageProvider:
         with self._lock:
             self._outputs[provider_job_id] = output
         width, height = image_dimensions(request.aspect_ratio)
-        settings = request.edit_settings
+        settings = request.generation_settings or request.edit_settings
         total_steps = settings.steps if settings is not None else None
         return ProviderSnapshot(
             "completed",

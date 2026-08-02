@@ -21,6 +21,12 @@ const baseProps = {
     message: "Ready without a GPU or model files.",
   } as const,
   providerStatusUnavailable: false,
+  options: {
+    samplers: ["euler", "dpmpp_2m"],
+    schedulers: ["beta", "simple"],
+    loras: [{ id: "demo-detail", label: "Detail enhancer" }],
+    defaults: { steps: 8, cfg: 1, shift: 5, sampler: "euler", scheduler: "beta" },
+  },
   onSubmit: vi.fn(async () => undefined),
   onCancel: vi.fn(async () => undefined),
   onRetry: vi.fn(async () => undefined),
@@ -80,6 +86,14 @@ describe("ImageGenerationPanel", () => {
       aspectRatio: "3:4",
       style: "product",
       seed: 81,
+      generation: {
+        steps: 8,
+        cfg: 1,
+        shift: 5,
+        sampler: "euler",
+        scheduler: "beta",
+        loras: [],
+      },
     });
   });
 
@@ -93,6 +107,28 @@ describe("ImageGenerationPanel", () => {
     expect(button).toBeDisabled();
     await user.click(button);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits advanced sampler values and a LoRA chain", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => undefined);
+    render(<ImageGenerationPanel {...baseProps} onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText("Prompt"), "A clean material study");
+    await user.click(screen.getByText("Advanced settings"));
+    await user.clear(screen.getByLabelText("Steps"));
+    await user.type(screen.getByLabelText("Steps"), "12");
+    await user.selectOptions(screen.getByLabelText("Scheduler"), "simple");
+    await user.selectOptions(screen.getByLabelText("Add generation LoRA"), "demo-detail");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      generation: expect.objectContaining({
+        steps: 12,
+        scheduler: "simple",
+        loras: [{ id: "demo-detail", modelWeight: 1, clipWeight: 1 }],
+      }),
+    }));
   });
 
   it("cancels an active job and renders a completed demo image", async () => {

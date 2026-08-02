@@ -20,6 +20,7 @@ from app.domain.image_jobs import (
     AspectRatio,
     EditFitMode,
     ImageEditSettings,
+    ImageGenerationSettings,
     ImageJobOperation,
     ImageJobRecord,
     ImageJobStatus,
@@ -91,6 +92,9 @@ class ImageJobRepository:
             "provider_metadata_json": (
                 "ALTER TABLE image_jobs ADD COLUMN provider_metadata_json JSON"
             ),
+            "generation_settings_json": (
+                "ALTER TABLE image_jobs ADD COLUMN generation_settings_json JSON"
+            ),
             "thumbnail_path": "ALTER TABLE image_jobs ADD COLUMN thumbnail_path TEXT",
             "result_size_bytes": "ALTER TABLE image_jobs ADD COLUMN result_size_bytes INTEGER",
             "result_sha256": "ALTER TABLE image_jobs ADD COLUMN result_sha256 VARCHAR(64)",
@@ -119,6 +123,7 @@ class ImageJobRepository:
         seed: int | None,
         provider: ImageProviderName,
         operation: ImageJobOperation = "generate",
+        generation_settings: ImageGenerationSettings | None = None,
         edit_settings: ImageEditSettings | None = None,
     ) -> ImageJobRecord:
         normalized_prompt = normalize_prompt(prompt)
@@ -131,6 +136,7 @@ class ImageJobRepository:
             provider=provider,
             created_at=self.now(),
             operation=operation,
+            generation_settings=generation_settings,
             edit_settings=edit_settings,
         )
         self.upsert(record)
@@ -408,6 +414,9 @@ class ImageJobRepository:
         row.source_path = record.source_path
         row.source_job_id = record.source_job_id
         row.face_reference_path = record.face_reference_path
+        row.generation_settings_json = self._serialize_generation_settings(
+            record.generation_settings
+        )
         row.edit_settings_json = self._serialize_edit_settings(record.edit_settings)
         row.provider_metadata_json = record.provider_metadata
         row.created_at = record.created_at
@@ -465,6 +474,9 @@ class ImageJobRepository:
             source_path=row.source_path,
             source_job_id=row.source_job_id,
             face_reference_path=row.face_reference_path,
+            generation_settings=ImageJobRepository._parse_generation_settings(
+                row.generation_settings_json
+            ),
             edit_settings=ImageJobRepository._parse_edit_settings(row.edit_settings_json),
             provider_job_id=row.provider_job_id,
             status=cast(ImageJobStatus, row.status),
@@ -500,6 +512,56 @@ class ImageJobRepository:
     @staticmethod
     def _aware(value: datetime) -> datetime:
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _serialize_generation_settings(
+        settings: ImageGenerationSettings | None,
+    ) -> dict[str, object] | None:
+        if settings is None:
+            return None
+        return {
+            "steps": settings.steps,
+            "cfg": settings.cfg,
+            "shift": settings.shift,
+            "sampler": settings.sampler,
+            "scheduler": settings.scheduler,
+            "loras": [
+                {
+                    "id": item.id,
+                    "modelWeight": item.model_weight,
+                    "clipWeight": item.clip_weight,
+                }
+                for item in settings.loras
+            ],
+        }
+
+    @staticmethod
+    def _parse_generation_settings(value: object) -> ImageGenerationSettings | None:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(value, dict):
+            return None
+        payload = cast(dict[str, Any], value)
+        raw_loras = payload.get("loras", [])
+        return ImageGenerationSettings(
+            steps=int(payload.get("steps", 8)),
+            cfg=float(payload.get("cfg", 1.0)),
+            shift=float(payload.get("shift", 5.0)),
+            sampler=str(payload.get("sampler", "euler")),
+            scheduler=str(payload.get("scheduler", "beta")),
+            loras=tuple(
+                LoraSelection(
+                    id=str(item["id"]),
+                    model_weight=float(item.get("modelWeight", 1.0)),
+                    clip_weight=float(item.get("clipWeight", 1.0)),
+                )
+                for item in raw_loras
+                if isinstance(item, dict) and isinstance(item.get("id"), str)
+            ),
+        )
 
     @staticmethod
     def _serialize_edit_settings(settings: ImageEditSettings | None) -> dict[str, object] | None:

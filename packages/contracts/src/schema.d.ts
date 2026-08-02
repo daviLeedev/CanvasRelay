@@ -227,6 +227,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers/image/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Generation Options */
+        get: operations["get_image_generation_options_api_v1_providers_image_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -360,9 +377,78 @@ export interface components {
             /** Steps */
             steps: number;
         };
+        /** ImageGenerationOptionDefaults */
+        ImageGenerationOptionDefaults: {
+            /** Cfg */
+            cfg: number;
+            /** Sampler */
+            sampler: string;
+            /** Scheduler */
+            scheduler: string;
+            /** Shift */
+            shift: number;
+            /** Steps */
+            steps: number;
+        };
+        /** ImageGenerationProviderOptionsResponse */
+        ImageGenerationProviderOptionsResponse: {
+            defaults: components["schemas"]["ImageGenerationOptionDefaults"];
+            /** Loras */
+            loras: components["schemas"]["ImageEditLoraOption"][];
+            /** Samplers */
+            samplers: string[];
+            /** Schedulers */
+            schedulers: string[];
+        };
+        /** ImageGenerationSettingsInput */
+        ImageGenerationSettingsInput: {
+            /**
+             * Cfg
+             * @default 1
+             */
+            cfg: number;
+            /** Loras */
+            loras?: components["schemas"]["LoraSelectionInput"][];
+            /**
+             * Sampler
+             * @default euler
+             */
+            sampler: string;
+            /**
+             * Scheduler
+             * @default beta
+             */
+            scheduler: string;
+            /**
+             * Shift
+             * @default 5
+             */
+            shift: number;
+            /**
+             * Steps
+             * @default 8
+             */
+            steps: number;
+        };
+        /** ImageGenerationSettingsResponse */
+        ImageGenerationSettingsResponse: {
+            /** Cfg */
+            cfg: number;
+            /** Loras */
+            loras: components["schemas"]["LoraSelectionResponse"][];
+            /** Sampler */
+            sampler: string;
+            /** Scheduler */
+            scheduler: string;
+            /** Shift */
+            shift: number;
+            /** Steps */
+            steps: number;
+        };
         /** ImageJobCreate */
         ImageJobCreate: {
             aspectRatio: components["schemas"]["AspectRatio"];
+            generation?: components["schemas"]["ImageGenerationSettingsInput"] | null;
             /** Prompt */
             prompt: string;
             /** Seed */
@@ -446,6 +532,7 @@ export interface components {
         ImageJobSettings: {
             aspectRatio: components["schemas"]["AspectRatio"];
             edit?: components["schemas"]["ImageEditSettingsResponse"] | null;
+            generation?: components["schemas"]["ImageGenerationSettingsResponse"] | null;
             /** Hasfacereference */
             hasFaceReference: boolean;
             operation: components["schemas"]["ImageJobOperation"];
@@ -483,6 +570,15 @@ export interface components {
         };
         /** @enum {string} */
         ImageStyle: "editorial" | "product" | "concept";
+        /** LoraSelectionInput */
+        LoraSelectionInput: {
+            /** Clipweight */
+            clipWeight: number;
+            /** Id */
+            id: string;
+            /** Modelweight */
+            modelWeight: number;
+        };
         /** LoraSelectionResponse */
         LoraSelectionResponse: {
             /** Clipweight */
@@ -929,6 +1025,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageEditProviderOptionsResponse"];
+                };
+            };
+        };
+    };
+    get_image_generation_options_api_v1_providers_image_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationProviderOptionsResponse"];
                 };
             };
         };

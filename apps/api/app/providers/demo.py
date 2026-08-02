@@ -6,6 +6,7 @@ from threading import RLock
 
 from app.domain.image_jobs import (
     ImageGenerationRequest,
+    ImageGenerationSettings,
     ImageProviderName,
     ProviderContent,
     ProviderErrorDetails,
@@ -16,6 +17,7 @@ from app.domain.image_jobs import (
 )
 from app.providers.base import (
     ImageEditProviderOptions,
+    ImageGenerationProviderOptions,
     ImageProviderError,
     LoraOption,
     ProviderDescriptor,
@@ -50,6 +52,16 @@ class DemoImageProvider:
         return ImageEditProviderOptions(
             samplers=("euler", "dpmpp_2m"),
             schedulers=("simple", "karras"),
+            loras=(
+                LoraOption("demo-detail", "Detail enhancer"),
+                LoraOption("demo-light", "Studio lighting"),
+            ),
+        )
+
+    async def describe_generation_options(self) -> ImageGenerationProviderOptions:
+        return ImageGenerationProviderOptions(
+            samplers=("euler", "dpmpp_2m"),
+            schedulers=("beta", "simple", "karras"),
             loras=(
                 LoraOption("demo-detail", "Detail enhancer"),
                 LoraOption("demo-light", "Studio lighting"),
@@ -103,7 +115,12 @@ class DemoImageProvider:
             elapsed = (now - preparing_until).total_seconds()
             sampling_duration = (RUN_DURATION - PREPARE_DURATION).total_seconds()
             fraction = max(0.0, min(1.0, elapsed / sampling_duration))
-            total_steps = request.edit_settings.steps if request.edit_settings else 8
+            settings = (
+                request.generation_settings
+                or request.edit_settings
+                or ImageGenerationSettings()
+            )
+            total_steps = settings.steps
             current_step = max(1, min(total_steps, round(fraction * total_steps)))
             return ProviderSnapshot(
                 "running",

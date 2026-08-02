@@ -46,6 +46,16 @@ class ImageEditSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class ImageGenerationSettings:
+    steps: int = 8
+    cfg: float = 1.0
+    shift: float = 5.0
+    sampler: str = "euler"
+    scheduler: str = "beta"
+    loras: tuple[LoraSelection, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderErrorDetails:
     code: str
     message: str
@@ -88,6 +98,7 @@ class ImageGenerationRequest:
     style: ImageStyle
     seed: int
     created_at: datetime
+    generation_settings: ImageGenerationSettings | None = None
     edit_settings: ImageEditSettings | None = None
 
 
@@ -104,6 +115,7 @@ class ImageJobRecord:
     source_path: str | None = None
     source_job_id: str | None = None
     face_reference_path: str | None = None
+    generation_settings: ImageGenerationSettings | None = None
     edit_settings: ImageEditSettings | None = None
     provider_job_id: str | None = None
     status: ImageJobStatus = "queued"

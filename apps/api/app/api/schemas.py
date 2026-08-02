@@ -30,11 +30,34 @@ class HealthResponse(ApiModel):
     timestamp: datetime
 
 
+class LoraSelectionInput(ApiModel):
+    id: str = Field(min_length=1, max_length=128)
+    model_weight: float = Field(alias="modelWeight", ge=-3, le=10)
+    clip_weight: float = Field(alias="clipWeight", ge=-3, le=3)
+
+
+class ImageGenerationSettingsInput(ApiModel):
+    steps: int = Field(default=8, ge=1, le=32)
+    cfg: float = Field(default=1.0, ge=0, le=12)
+    shift: float = Field(default=5.0, ge=0, le=12)
+    sampler: str = Field(default="euler", min_length=1, max_length=80)
+    scheduler: str = Field(default="beta", min_length=1, max_length=80)
+    loras: list[LoraSelectionInput] = Field(default_factory=list, max_length=8)
+
+    @field_validator("loras")
+    @classmethod
+    def validate_unique_loras(cls, value: list[LoraSelectionInput]) -> list[LoraSelectionInput]:
+        if len({item.id for item in value}) != len(value):
+            raise ValueError("Each selected LoRA must be unique.")
+        return value
+
+
 class ImageJobCreate(ApiModel):
     prompt: str = Field(min_length=1, max_length=1200)
     aspect_ratio: AspectRatio = Field(alias="aspectRatio")
     style: ImageStyle
     seed: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    generation: ImageGenerationSettingsInput | None = None
 
     @field_validator("prompt")
     @classmethod
@@ -52,6 +75,7 @@ class ImageJobSettings(ApiModel):
     operation: ImageJobOperation
     has_face_reference: bool = Field(alias="hasFaceReference")
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    generation: ImageGenerationSettingsResponse | None = None
     edit: ImageEditSettingsResponse | None = None
 
 
@@ -67,6 +91,15 @@ class ImageEditSettingsResponse(ApiModel):
     reference_influence: float = Field(alias="referenceInfluence")
     grounding_resolution: int = Field(alias="groundingResolution")
     fit_mode: EditFitMode = Field(alias="fitMode")
+    sampler: str
+    scheduler: str
+    loras: list[LoraSelectionResponse]
+
+
+class ImageGenerationSettingsResponse(ApiModel):
+    steps: int
+    cfg: float
+    shift: float
     sampler: str
     scheduler: str
     loras: list[LoraSelectionResponse]
@@ -141,3 +174,18 @@ class ImageEditProviderOptionsResponse(ApiModel):
     schedulers: list[str]
     loras: list[ImageEditLoraOption]
     defaults: ImageEditOptionDefaults
+
+
+class ImageGenerationOptionDefaults(ApiModel):
+    steps: int
+    cfg: float
+    shift: float
+    sampler: str
+    scheduler: str
+
+
+class ImageGenerationProviderOptionsResponse(ApiModel):
+    samplers: list[str]
+    schedulers: list[str]
+    loras: list[ImageEditLoraOption]
+    defaults: ImageGenerationOptionDefaults

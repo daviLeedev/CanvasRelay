@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from app.api.schemas import (
     ImageEditSettingsResponse,
+    ImageGenerationSettingsResponse,
     ImageJobCreate,
     ImageJobError,
     ImageJobListResponse,
@@ -15,7 +16,13 @@ from app.api.schemas import (
     ImageJobSettings,
     LoraSelectionResponse,
 )
-from app.domain.image_jobs import ImageJobOperation, ImageJobRecord, ImageJobStatus
+from app.domain.image_jobs import (
+    ImageGenerationSettings,
+    ImageJobOperation,
+    ImageJobRecord,
+    ImageJobStatus,
+    LoraSelection,
+)
 from app.providers.base import ImageProviderError
 from app.repositories.image_jobs import (
     TERMINAL_STATUSES,
@@ -76,6 +83,23 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
                 for item in record.edit_settings.loras
             ],
         )
+    generation = None
+    if record.generation_settings is not None:
+        generation = ImageGenerationSettingsResponse(
+            steps=record.generation_settings.steps,
+            cfg=record.generation_settings.cfg,
+            shift=record.generation_settings.shift,
+            sampler=record.generation_settings.sampler,
+            scheduler=record.generation_settings.scheduler,
+            loras=[
+                LoraSelectionResponse(
+                    id=item.id,
+                    modelWeight=item.model_weight,
+                    clipWeight=item.clip_weight,
+                )
+                for item in record.generation_settings.loras
+            ],
+        )
     return ImageJobResponse(
         id=record.id,
         status=record.status,
@@ -95,6 +119,7 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
             operation=record.operation,
             hasFaceReference=record.face_reference_path is not None,
             sourceJobId=record.source_job_id,
+            generation=generation,
             edit=edit,
         ),
         createdAt=record.created_at,
@@ -134,11 +159,43 @@ async def create_image_job(
     payload: ImageJobCreate,
     service: Annotated[ImageJobService, Depends(get_image_job_service)],
 ) -> ImageJobResponse:
+    settings = payload.generation
+    if settings is None:
+        options = await service.describe_generation_options()
+        generation_settings = ImageGenerationSettings(
+            steps=options.default_steps,
+            cfg=options.default_cfg,
+            shift=options.default_shift,
+            sampler=options.default_sampler,
+            scheduler=options.default_scheduler,
+        )
+    else:
+        options = await service.describe_generation_options()
+        if settings.sampler not in options.samplers or settings.scheduler not in options.schedulers:
+            raise HTTPException(
+                422,
+                detail="Choose a sampler and scheduler supported by the provider.",
+            )
+        allowed_loras = {item.id for item in options.loras}
+        if any(item.id not in allowed_loras for item in settings.loras):
+            raise HTTPException(422, detail="One or more selected LoRAs are not available.")
+        generation_settings = ImageGenerationSettings(
+            steps=settings.steps,
+            cfg=settings.cfg,
+            shift=settings.shift,
+            sampler=settings.sampler,
+            scheduler=settings.scheduler,
+            loras=tuple(
+                LoraSelection(item.id, item.model_weight, item.clip_weight)
+                for item in settings.loras
+            ),
+        )
     record = await service.create(
         prompt=payload.prompt,
         aspect_ratio=payload.aspect_ratio,
         style=payload.style,
         seed=payload.seed,
+        generation_settings=generation_settings,
     )
     return _to_response(record)
 

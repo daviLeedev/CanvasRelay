@@ -318,10 +318,179 @@
         "title": "ImageEditSettingsResponse",
         "type": "object"
       },
+      "ImageGenerationOptionDefaults": {
+        "properties": {
+          "cfg": {
+            "title": "Cfg",
+            "type": "number"
+          },
+          "sampler": {
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "shift": {
+            "title": "Shift",
+            "type": "number"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "cfg",
+          "shift",
+          "sampler",
+          "scheduler"
+        ],
+        "title": "ImageGenerationOptionDefaults",
+        "type": "object"
+      },
+      "ImageGenerationProviderOptionsResponse": {
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/ImageGenerationOptionDefaults"
+          },
+          "loras": {
+            "items": {
+              "$ref": "#/components/schemas/ImageEditLoraOption"
+            },
+            "title": "Loras",
+            "type": "array"
+          },
+          "samplers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Samplers",
+            "type": "array"
+          },
+          "schedulers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schedulers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "samplers",
+          "schedulers",
+          "loras",
+          "defaults"
+        ],
+        "title": "ImageGenerationProviderOptionsResponse",
+        "type": "object"
+      },
+      "ImageGenerationSettingsInput": {
+        "properties": {
+          "cfg": {
+            "default": 1.0,
+            "maximum": 12.0,
+            "minimum": 0.0,
+            "title": "Cfg",
+            "type": "number"
+          },
+          "loras": {
+            "items": {
+              "$ref": "#/components/schemas/LoraSelectionInput"
+            },
+            "maxItems": 8,
+            "title": "Loras",
+            "type": "array"
+          },
+          "sampler": {
+            "default": "euler",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "default": "beta",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "shift": {
+            "default": 5.0,
+            "maximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shift",
+            "type": "number"
+          },
+          "steps": {
+            "default": 8,
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "title": "ImageGenerationSettingsInput",
+        "type": "object"
+      },
+      "ImageGenerationSettingsResponse": {
+        "properties": {
+          "cfg": {
+            "title": "Cfg",
+            "type": "number"
+          },
+          "loras": {
+            "items": {
+              "$ref": "#/components/schemas/LoraSelectionResponse"
+            },
+            "title": "Loras",
+            "type": "array"
+          },
+          "sampler": {
+            "title": "Sampler",
+            "type": "string"
+          },
+          "scheduler": {
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "shift": {
+            "title": "Shift",
+            "type": "number"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "cfg",
+          "shift",
+          "sampler",
+          "scheduler",
+          "loras"
+        ],
+        "title": "ImageGenerationSettingsResponse",
+        "type": "object"
+      },
       "ImageJobCreate": {
         "properties": {
           "aspectRatio": {
             "$ref": "#/components/schemas/AspectRatio"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageGenerationSettingsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "prompt": {
             "maxLength": 1200,
@@ -634,6 +803,16 @@
               }
             ]
           },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageGenerationSettingsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "hasFaceReference": {
             "title": "Hasfacereference",
             "type": "boolean"
@@ -764,6 +943,35 @@
           "concept"
         ],
         "type": "string"
+      },
+      "LoraSelectionInput": {
+        "properties": {
+          "clipWeight": {
+            "maximum": 3.0,
+            "minimum": -3.0,
+            "title": "Clipweight",
+            "type": "number"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "modelWeight": {
+            "maximum": 10.0,
+            "minimum": -3.0,
+            "title": "Modelweight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "modelWeight",
+          "clipWeight"
+        ],
+        "title": "LoraSelectionInput",
+        "type": "object"
       },
       "LoraSelectionResponse": {
         "properties": {
@@ -1399,6 +1607,27 @@
           }
         },
         "summary": "Get Image Edit Options",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/v1/providers/image/options": {
+      "get": {
+        "operationId": "get_image_generation_options_api_v1_providers_image_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageGenerationProviderOptionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Image Generation Options",
         "tags": [
           "providers"
         ]

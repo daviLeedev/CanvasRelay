@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import pytest
 from app.domain.image_jobs import (
     ImageEditSettings,
     ImageGenerationRequest,
+    ImageGenerationSettings,
     LoraSelection,
     ProviderContent,
 )
@@ -131,6 +133,100 @@ async def test_comfyui_submits_bound_api_workflow_and_collects_output(tmp_path: 
     assert snapshot.status == "completed"
     assert snapshot.result is not None and snapshot.result.mime_type == "image/png"
     assert content.body == b"safe-png-content"
+
+
+@pytest.mark.anyio
+async def test_comfyui_applies_generation_controls_and_allowed_loras(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.json"
+    workflow_path.write_text(
+        json.dumps(
+            {
+                "1": {"class_type": "CLIPLoader", "inputs": {}},
+                "2": {"class_type": "UNETLoader", "inputs": {}},
+                "5": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"clip": ["1", 0], "text": "{{prompt}}"},
+                },
+                "6": {
+                    "class_type": "EmptyLatentImage",
+                    "inputs": {"width": "{{width}}", "height": "{{height}}"},
+                },
+                "8": {
+                    "class_type": "KSamplerAdvanced",
+                    "inputs": {
+                        "model": ["19", 0],
+                        "noise_seed": "{{seed}}",
+                        "steps": 8,
+                        "cfg": 1.0,
+                        "sampler_name": "euler",
+                        "scheduler": "beta",
+                    },
+                },
+                "19": {
+                    "class_type": "ModelSamplingAuraFlow",
+                    "inputs": {"model": ["2", 0], "shift": 5.0},
+                },
+                "99": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "{{filename_prefix}}"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    allowlist_path = tmp_path / "loras.json"
+    allowlist_path.write_text(
+        json.dumps(
+            {
+                "loras": [
+                    {"id": "detail", "label": "Detail", "filename": "detail.safetensors"}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    submitted: dict[str, Any] = {}
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        if http_request.url.path == "/prompt":
+            submitted.update(json.loads(http_request.content))
+            return httpx.Response(200, json={"prompt_id": "provider_generation"})
+        raise AssertionError(f"Unexpected request: {http_request.method} {http_request.url.path}")
+
+    provider = ComfyUIImageProvider(
+        base_url="http://comfy.test",
+        workflow_path=workflow_path,
+        edit_lora_allowlist_path=allowlist_path,
+        transport=httpx.MockTransport(handler),
+    )
+    controlled_request = replace(
+        request(),
+        generation_settings=ImageGenerationSettings(
+            steps=12,
+            cfg=2.5,
+            shift=6.5,
+            sampler="dpmpp_2m",
+            scheduler="karras",
+            loras=(LoraSelection("detail", 0.7, 0.4),),
+        ),
+    )
+
+    await provider.submit(controlled_request)
+
+    workflow = submitted["prompt"]
+    assert workflow["8"]["inputs"].items() >= {
+        "steps": 12,
+        "cfg": 2.5,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras",
+    }.items()
+    assert workflow["19"]["inputs"]["shift"] == 6.5
+    lora = workflow["cr_lora_001"]["inputs"]
+    assert lora["lora_name"] == "detail.safetensors"
+    assert lora["strength_model"] == 0.7
+    assert lora["strength_clip"] == 0.4
+    assert workflow["8"]["inputs"]["model"] == ["cr_lora_001", 0]
+    assert workflow["5"]["inputs"]["clip"] == ["cr_lora_001", 1]
 
 
 @pytest.mark.anyio
