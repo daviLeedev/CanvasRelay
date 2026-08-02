@@ -8,12 +8,16 @@ from fastapi.responses import FileResponse, StreamingResponse
 from app.api.schemas import (
     ImageEditSettingsResponse,
     ImageGenerationSettingsResponse,
+    ImageJobBatchDelete,
+    ImageJobBatchDeleteResponse,
     ImageJobCreate,
     ImageJobError,
     ImageJobListResponse,
     ImageJobResponse,
     ImageJobResult,
     ImageJobSettings,
+    ImageJobTagListResponse,
+    ImageJobTagsUpdate,
     LoraSelectionResponse,
 )
 from app.domain.image_jobs import (
@@ -111,6 +115,7 @@ def _to_response(record: ImageJobRecord) -> ImageJobResponse:
         stalled=record.stalled,
         estimatedRemainingSeconds=record.estimated_remaining_seconds,
         prompt=record.prompt,
+        tags=list(record.tags),
         settings=ImageJobSettings(
             aspectRatio=record.aspect_ratio,
             style=record.style,
@@ -206,6 +211,8 @@ async def list_image_jobs(
     limit: Annotated[int, Query(ge=1, le=100)] = 24,
     job_status: Annotated[ImageJobStatus | None, Query(alias="status")] = None,
     operation: Annotated[ImageJobOperation | None, Query()] = None,
+    search: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
+    tag: Annotated[str | None, Query(min_length=1, max_length=48)] = None,
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
 ) -> ImageJobListResponse:
     try:
@@ -213,6 +220,8 @@ async def list_image_jobs(
             limit=limit,
             status=job_status,
             operation=operation,
+            search=search,
+            tag=tag,
             cursor=cursor,
         )
     except InvalidImageJobCursorError as error:
@@ -221,6 +230,26 @@ async def list_image_jobs(
         items=[_to_response(record) for record in records],
         nextCursor=next_cursor,
     )
+
+
+@router.get("/tags", response_model=ImageJobTagListResponse)
+async def list_image_job_tags(
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> ImageJobTagListResponse:
+    return ImageJobTagListResponse(tags=service.list_tags())
+
+
+@router.post("/assets/delete", response_model=ImageJobBatchDeleteResponse)
+async def delete_image_job_assets(
+    payload: ImageJobBatchDelete,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> ImageJobBatchDeleteResponse:
+    try:
+        return ImageJobBatchDeleteResponse(deletedIds=service.delete_assets(payload.ids))
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
 
 
 @router.get("/{job_id}", response_model=ImageJobResponse)
@@ -243,6 +272,20 @@ async def cancel_image_job(
 ) -> ImageJobResponse:
     try:
         return _to_response(await service.cancel(job_id))
+    except ImageJobNotFoundError as error:
+        raise _not_found(error) from error
+    except ImageProviderError as error:
+        raise _provider_unavailable(error) from error
+
+
+@router.patch("/{job_id}/tags", response_model=ImageJobResponse)
+async def update_image_job_tags(
+    job_id: str,
+    payload: ImageJobTagsUpdate,
+    service: Annotated[ImageJobService, Depends(get_image_job_service)],
+) -> ImageJobResponse:
+    try:
+        return _to_response(service.update_tags(job_id, tuple(payload.tags)))
     except ImageJobNotFoundError as error:
         raise _not_found(error) from error
     except ImageProviderError as error:

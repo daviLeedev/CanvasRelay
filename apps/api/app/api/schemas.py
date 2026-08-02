@@ -136,6 +136,7 @@ class ImageJobResponse(ApiModel):
         default=None, alias="estimatedRemainingSeconds", ge=0
     )
     prompt: str
+    tags: list[str] = Field(default_factory=list)
     settings: ImageJobSettings
     created_at: datetime = Field(alias="createdAt")
     started_at: datetime | None = Field(alias="startedAt")
@@ -147,6 +148,41 @@ class ImageJobResponse(ApiModel):
 class ImageJobListResponse(ApiModel):
     items: list[ImageJobResponse]
     next_cursor: str | None = Field(default=None, alias="nextCursor")
+
+
+class ImageJobTagsUpdate(ApiModel):
+    tags: list[str] = Field(default_factory=list, max_length=12)
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for tag in value:
+            item = " ".join(tag.split()).casefold()
+            if not item or len(item) > 48:
+                raise ValueError("Tags must contain 1 to 48 visible characters.")
+            if item not in normalized:
+                normalized.append(item)
+        return normalized
+
+
+class ImageJobTagListResponse(ApiModel):
+    tags: list[str]
+
+
+class ImageJobBatchDelete(ApiModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("ids")
+    @classmethod
+    def validate_unique_ids(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("Each selected image job must be unique.")
+        return value
+
+
+class ImageJobBatchDeleteResponse(ApiModel):
+    deleted_ids: list[str] = Field(alias="deletedIds")
 
 
 class ImageProviderResponse(ApiModel):

@@ -275,6 +275,38 @@ def test_job_list_uses_a_stable_cursor_without_repeating_items(tmp_path: Path) -
     assert client.get("/api/v1/image-jobs?cursor=not-a-cursor").status_code == 422
 
 
+def test_library_search_and_tags_are_persistent_and_filterable(tmp_path: Path) -> None:
+    clock = MutableClock()
+    database_path = tmp_path / "canvasrelay.sqlite3"
+    client = make_client(clock, tmp_path, database_path=database_path)
+    first = create_job(client, prompt="Architectural daylight portrait")
+    second = create_job(client, prompt="Studio product layout")
+    clock.advance(milliseconds=4000)
+    assert client.get(f"/api/v1/image-jobs/{first['id']}/result").status_code == 200
+    assert client.get(f"/api/v1/image-jobs/{second['id']}/result").status_code == 200
+
+    tagged = client.patch(
+        f"/api/v1/image-jobs/{first['id']}/tags",
+        json={"tags": ["Portrait", "  Client   Review  ", "portrait"]},
+    )
+
+    assert tagged.status_code == 200
+    assert tagged.json()["tags"] == ["client review", "portrait"]
+    assert client.get("/api/v1/image-jobs/tags").json() == {
+        "tags": ["client review", "portrait"]
+    }
+    searched = client.get("/api/v1/image-jobs", params={"search": "daylight"})
+    filtered = client.get("/api/v1/image-jobs", params={"tag": "PORTRAIT"})
+    assert [item["id"] for item in searched.json()["items"]] == [first["id"]]
+    assert [item["id"] for item in filtered.json()["items"]] == [first["id"]]
+
+    restarted = make_client(clock, tmp_path, database_path=database_path)
+    assert restarted.get(f"/api/v1/image-jobs/{first['id']}").json()["tags"] == [
+        "client review",
+        "portrait",
+    ]
+
+
 def test_completed_filter_refreshes_jobs_that_finished_while_no_client_was_open(
     tmp_path: Path,
 ) -> None:
@@ -301,6 +333,21 @@ def test_completed_library_asset_requires_explicit_delete(tmp_path: Path) -> Non
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/image-jobs/{job_id}").status_code == 404
     assert not list((tmp_path / "media").glob(f"{job_id}.*"))
+
+
+def test_completed_library_assets_can_be_deleted_as_a_batch(tmp_path: Path) -> None:
+    clock = MutableClock()
+    client = make_client(clock, tmp_path)
+    job_ids = [cast(str, create_job(client, prompt=prompt)["id"]) for prompt in ("First", "Second")]
+    clock.advance(milliseconds=4000)
+    for job_id in job_ids:
+        assert client.get(f"/api/v1/image-jobs/{job_id}/result").status_code == 200
+
+    deleted = client.post("/api/v1/image-jobs/assets/delete", json={"ids": job_ids})
+
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deletedIds": job_ids}
+    assert all(client.get(f"/api/v1/image-jobs/{job_id}").status_code == 404 for job_id in job_ids)
 
 
 def test_library_asset_cannot_be_deleted_while_an_edit_references_it(tmp_path: Path) -> None:

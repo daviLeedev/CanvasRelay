@@ -56,6 +56,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/image-jobs/assets/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Image Job Assets */
+        post: operations["delete_image_job_assets_api_v1_image_jobs_assets_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Image Job Tags */
+        get: operations["list_image_job_tags_api_v1_image_jobs_tags_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/image-jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -157,6 +191,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-jobs/{job_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Image Job Tags */
+        patch: operations["update_image_job_tags_api_v1_image_jobs__job_id__tags_patch"];
         trace?: never;
     };
     "/api/v1/image-jobs/{job_id}/thumbnail": {
@@ -445,6 +496,16 @@ export interface components {
             /** Steps */
             steps: number;
         };
+        /** ImageJobBatchDelete */
+        ImageJobBatchDelete: {
+            /** Ids */
+            ids: string[];
+        };
+        /** ImageJobBatchDeleteResponse */
+        ImageJobBatchDeleteResponse: {
+            /** Deletedids */
+            deletedIds: string[];
+        };
         /** ImageJobCreate */
         ImageJobCreate: {
             aspectRatio: components["schemas"]["AspectRatio"];
@@ -504,6 +565,8 @@ export interface components {
             /** Startedat */
             startedAt: string | null;
             status: components["schemas"]["ImageJobStatus"];
+            /** Tags */
+            tags?: string[];
             /** Totalsteps */
             totalSteps?: number | null;
         };
@@ -545,6 +608,16 @@ export interface components {
         };
         /** @enum {string} */
         ImageJobStatus: "queued" | "running" | "completed" | "failed" | "canceled";
+        /** ImageJobTagListResponse */
+        ImageJobTagListResponse: {
+            /** Tags */
+            tags: string[];
+        };
+        /** ImageJobTagsUpdate */
+        ImageJobTagsUpdate: {
+            /** Tags */
+            tags?: string[];
+        };
         /** @enum {string} */
         ImageMimeType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/webp";
         /** @enum {string} */
@@ -669,6 +742,8 @@ export interface operations {
                 limit?: number;
                 status?: components["schemas"]["ImageJobStatus"] | null;
                 operation?: components["schemas"]["ImageJobOperation"] | null;
+                search?: string | null;
+                tag?: string | null;
                 cursor?: string | null;
             };
             header?: never;
@@ -726,6 +801,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_image_job_assets_api_v1_image_jobs_assets_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageJobBatchDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobBatchDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_image_job_tags_api_v1_image_jobs_tags_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobTagListResponse"];
                 };
             };
         };
@@ -922,6 +1050,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_image_job_tags_api_v1_image_jobs__job_id__tags_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageJobTagsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

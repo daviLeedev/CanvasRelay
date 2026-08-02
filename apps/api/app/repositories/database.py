@@ -16,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.pool import StaticPool
 
 
@@ -71,6 +71,12 @@ class ImageJobRow(Base):
     error_action: Mapped[str | None] = mapped_column(Text)
     error_retryable: Mapped[bool | None] = mapped_column(Boolean)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    tags: Mapped[list[ImageJobTagRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ImageJobTagRow.tag",
+    )
 
     __table_args__ = (
         Index("ix_image_jobs_created", created_at.desc(), id.desc()),
@@ -79,6 +85,20 @@ class ImageJobRow(Base):
         Index("ix_image_jobs_source_job", source_job_id),
         Index("ix_image_jobs_provider_job", provider, provider_job_id),
     )
+
+
+class ImageJobTagRow(Base):
+    __tablename__ = "image_job_tags"
+
+    job_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("image_jobs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tag: Mapped[str] = mapped_column(String(48), primary_key=True)
+    job: Mapped[ImageJobRow] = relationship(back_populates="tags")
+
+    __table_args__ = (Index("ix_image_job_tags_tag_job", tag, job_id),)
 
 
 def create_database_engine(

@@ -9,6 +9,9 @@ type ImageEditRequestContract = components["schemas"]["Body_create_image_edit_jo
 export type ImageEditLoraSelection = components["schemas"]["LoraSelectionResponse"];
 export type ImageEditProviderOptions = components["schemas"]["ImageEditProviderOptionsResponse"];
 export type ImageGenerationProviderOptions = components["schemas"]["ImageGenerationProviderOptionsResponse"];
+export type ImageJobTagListResponse = components["schemas"]["ImageJobTagListResponse"];
+export type ImageJobTagsUpdate = components["schemas"]["ImageJobTagsUpdate"];
+export type ImageJobBatchDeleteResponse = components["schemas"]["ImageJobBatchDeleteResponse"];
 export type ImageEditJobCreate = Omit<ImageEditRequestContract, "source" | "faceReference" | "loras"> & {
   source?: File;
   sourceJobId?: string;
@@ -125,6 +128,9 @@ export function parseImageJob(value: unknown): ImageJobResponse {
       typeof value.error.action === "string" &&
       typeof value.error.retryable === "boolean");
 
+  const tags = Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === "string")
+    ? value.tags
+    : [];
   if (
     typeof value.id !== "string" ||
     typeof value.status !== "string" ||
@@ -149,7 +155,7 @@ export function parseImageJob(value: unknown): ImageJobResponse {
     throw new Error("Invalid image job response.");
   }
 
-  return value as ImageJobResponse;
+  return { ...value, tags } as ImageJobResponse;
 }
 
 function parseImageJobList(value: unknown): ImageJobListResponse {
@@ -258,18 +264,24 @@ export async function fetchImageJobPage({
   limit = 24,
   status,
   operation,
+  search: searchTerm,
+  tag,
   cursor,
   signal,
 }: Readonly<{
   limit?: number;
   status?: ImageJobResponse["status"];
   operation?: ImageJobResponse["settings"]["operation"];
+  search?: string;
+  tag?: string;
   cursor?: string | null;
   signal?: AbortSignal;
 }> = {}): Promise<ImageJobListResponse> {
   const search = new URLSearchParams({ limit: String(limit) });
   if (status) search.set("status", status);
   if (operation) search.set("operation", operation);
+  if (searchTerm) search.set("search", searchTerm);
+  if (tag) search.set("tag", tag);
   if (cursor) search.set("cursor", cursor);
   const response = await fetch(`${getApiBaseUrl()}/api/v1/image-jobs?${search.toString()}`, {
     headers: { Accept: "application/json" },
@@ -322,6 +334,43 @@ export async function deleteImageJobAsset(jobId: string): Promise<void> {
     { method: "DELETE", headers: { Accept: "application/json" } },
   );
   if (!response.ok) throw new Error("The stored image could not be deleted.");
+}
+
+export async function deleteImageJobAssets(jobIds: string[]): Promise<string[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/image-jobs/assets/delete`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: jobIds }),
+  });
+  if (!response.ok) throw new Error("The selected images could not be deleted.");
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || !Array.isArray(payload.deletedIds) ||
+      !payload.deletedIds.every((id) => typeof id === "string")) {
+    throw new Error("The image service returned an invalid deletion response.");
+  }
+  return (payload as ImageJobBatchDeleteResponse).deletedIds;
+}
+
+export async function fetchImageJobTags(signal?: AbortSignal): Promise<string[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/image-jobs/tags`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) throw new Error("Library tags could not be loaded.");
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || !Array.isArray(payload.tags) ||
+      !payload.tags.every((tag) => typeof tag === "string")) {
+    throw new Error("The image service returned invalid Library tags.");
+  }
+  return (payload as ImageJobTagListResponse).tags;
+}
+
+export function updateImageJobTags(jobId: string, tags: string[]): Promise<ImageJobResponse> {
+  const body: ImageJobTagsUpdate = { tags };
+  return requestImageJob(`/api/v1/image-jobs/${encodeURIComponent(jobId)}/tags`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getImageResultUrl(job: ImageJobResponse): string | null {
