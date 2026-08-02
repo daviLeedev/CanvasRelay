@@ -117,6 +117,7 @@ function phaseLabel(job: ImageJobResponse) {
     queued: "Queued",
     uploading: "Uploading inputs",
     preparing: "Preparing model",
+    generating: "Generating",
     sampling: "Sampling",
     saving: "Saving result",
     completed: "Completed",

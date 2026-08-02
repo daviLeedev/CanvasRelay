@@ -46,6 +46,7 @@ class ImageJobRow(Base):
     face_reference_path: Mapped[str | None] = mapped_column(Text)
     generation_settings_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     edit_settings_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
+    gpt_settings_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     provider_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(json_type)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     provider_job_id: Mapped[str | None] = mapped_column(String(128))
@@ -78,6 +79,18 @@ class ImageJobRow(Base):
         lazy="selectin",
         order_by="ImageJobTagRow.tag",
     )
+    inputs: Mapped[list[ImageJobInputRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ImageJobInputRow.ordinal",
+    )
+    assets: Mapped[list[ImageJobAssetRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ImageJobAssetRow.ordinal",
+    )
 
     __table_args__ = (
         Index("ix_image_jobs_created", created_at.desc(), id.desc()),
@@ -100,6 +113,40 @@ class ImageJobTagRow(Base):
     job: Mapped[ImageJobRow] = relationship(back_populates="tags")
 
     __table_args__ = (Index("ix_image_job_tags_tag_job", tag, job_id),)
+
+
+class ImageJobInputRow(Base):
+    __tablename__ = "image_job_inputs"
+
+    job_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("image_jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(24), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    storage_key: Mapped[str] = mapped_column(Text)
+    mime_type: Mapped[str] = mapped_column(String(64))
+    job: Mapped[ImageJobRow] = relationship(back_populates="inputs")
+
+    __table_args__ = (Index("ix_image_job_inputs_job_role", job_id, role, ordinal),)
+
+
+class ImageJobAssetRow(Base):
+    __tablename__ = "image_job_assets"
+
+    job_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("image_jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    storage_key: Mapped[str] = mapped_column(Text)
+    thumbnail_key: Mapped[str | None] = mapped_column(Text)
+    mime_type: Mapped[str] = mapped_column(String(64))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    job: Mapped[ImageJobRow] = relationship(back_populates="assets")
+
+    __table_args__ = (Index("ix_image_job_assets_job_ordinal", job_id, ordinal),)
 
 
 def create_database_engine(

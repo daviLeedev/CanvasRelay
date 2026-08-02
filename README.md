@@ -8,6 +8,11 @@ This public repository provides a typed Next.js and FastAPI runtime, a responsiv
 provider. The deterministic provider remains the default so the complete flow
 runs without credentials, models, or a GPU.
 
+An optional owner-managed GPT image connector is also available for local use.
+It uses the owner computer's existing Codex login through a loopback proxy; it
+does not accept browser tokens or claim that a visitor's subscription is connected.
+See [Owner Codex GPT image setup](docs/codex-owner-gpt-image.md).
+
 ## Current Stack
 
 - Next.js App Router, React, and TypeScript

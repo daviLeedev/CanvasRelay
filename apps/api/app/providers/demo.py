@@ -82,6 +82,12 @@ class DemoImageProvider:
         del source, face_reference
         return await self.submit(request)
 
+    async def submit_with_references(
+        self, request: ImageGenerationRequest, references: tuple[ProviderContent, ...]
+    ) -> str:
+        del references
+        return await self.submit(request)
+
     def resume(self, provider_job_id: str, request: ImageGenerationRequest) -> None:
         with self._lock:
             self._jobs.setdefault(provider_job_id, request)
@@ -160,6 +166,9 @@ class DemoImageProvider:
                 )
             )
         return ProviderContent(render_demo_svg(request).encode(), "image/svg+xml")
+
+    async def collect_many(self, provider_job_id: str) -> tuple[ProviderContent, ...]:
+        return (await self.collect(provider_job_id),)
 
     def _get(self, provider_job_id: str) -> ImageGenerationRequest:
         with self._lock:

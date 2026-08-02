@@ -203,8 +203,15 @@ class FilesystemUploadStore:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
-    def save(self, job_id: str, role: str, content: ProviderContent) -> str:
-        if role not in {"source", "face"}:
+    def save(
+        self,
+        job_id: str,
+        role: str,
+        content: ProviderContent,
+        *,
+        ordinal: int = 0,
+    ) -> str:
+        if role not in {"source", "face", "reference"} or ordinal < 0:
             raise ValueError("Unsupported upload role.")
         extension = {
             "image/png": ".png",
@@ -212,7 +219,8 @@ class FilesystemUploadStore:
             "image/webp": ".webp",
             "image/svg+xml": ".svg",
         }[content.mime_type]
-        filename = f"{job_id}_{role}{extension}"
+        suffix = f"_{ordinal}" if role == "reference" else ""
+        filename = f"{job_id}_{role}{suffix}{extension}"
         target = self._resolve(filename)
         if target.exists():
             filename = f"{job_id}_{role}_{uuid4().hex[:12]}{extension}"

@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from app.domain.image_jobs import (
     AspectRatio,
     EditFitMode,
+    GPTImageSettings,
     ImageEditSettings,
     ImageGenerationSettings,
     ImageJobOperation,
@@ -29,6 +30,8 @@ from app.domain.image_jobs import (
     ImageProgressSource,
     ImageProviderName,
     ImageStyle,
+    JobAsset,
+    JobInput,
     LoraSelection,
     ProviderErrorDetails,
     ProviderResult,
@@ -36,7 +39,14 @@ from app.domain.image_jobs import (
     normalize_prompt,
     resolve_seed,
 )
-from app.repositories.database import Base, ImageJobRow, ImageJobTagRow, create_database_engine
+from app.repositories.database import (
+    Base,
+    ImageJobAssetRow,
+    ImageJobInputRow,
+    ImageJobRow,
+    ImageJobTagRow,
+    create_database_engine,
+)
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "canceled"})
 
@@ -93,6 +103,7 @@ class ImageJobRepository:
             "generation_settings_json": (
                 "ALTER TABLE image_jobs ADD COLUMN generation_settings_json JSON"
             ),
+            "gpt_settings_json": "ALTER TABLE image_jobs ADD COLUMN gpt_settings_json JSON",
             "thumbnail_path": "ALTER TABLE image_jobs ADD COLUMN thumbnail_path TEXT",
             "result_size_bytes": "ALTER TABLE image_jobs ADD COLUMN result_size_bytes INTEGER",
             "result_sha256": "ALTER TABLE image_jobs ADD COLUMN result_sha256 VARCHAR(64)",
@@ -123,6 +134,7 @@ class ImageJobRepository:
         operation: ImageJobOperation = "generate",
         generation_settings: ImageGenerationSettings | None = None,
         edit_settings: ImageEditSettings | None = None,
+        gpt_settings: GPTImageSettings | None = None,
     ) -> ImageJobRecord:
         normalized_prompt = normalize_prompt(prompt)
         record = ImageJobRecord(
@@ -136,6 +148,7 @@ class ImageJobRepository:
             operation=operation,
             generation_settings=generation_settings,
             edit_settings=edit_settings,
+            gpt_settings=gpt_settings,
         )
         self.upsert(record)
         return record
@@ -324,6 +337,14 @@ class ImageJobRepository:
             )
             return self.upsert(record)
 
+    def replace_inputs(self, job_id: str, inputs: tuple[JobInput, ...]) -> ImageJobRecord:
+        with self._lock:
+            return self.upsert(replace(self.get(job_id), inputs=inputs))
+
+    def replace_assets(self, job_id: str, assets: tuple[JobAsset, ...]) -> ImageJobRecord:
+        with self._lock:
+            return self.upsert(replace(self.get(job_id), assets=assets))
+
     def apply_snapshot(
         self,
         job_id: str,
@@ -480,6 +501,7 @@ class ImageJobRepository:
             record.generation_settings
         )
         row.edit_settings_json = self._serialize_edit_settings(record.edit_settings)
+        row.gpt_settings_json = self._serialize_gpt_settings(record.gpt_settings)
         row.provider_metadata_json = record.provider_metadata
         row.created_at = record.created_at
         row.provider_job_id = record.provider_job_id
@@ -509,6 +531,58 @@ class ImageJobRepository:
         normalized_tags = tuple(sorted(set(record.tags)))
         if current_tags != normalized_tags:
             row.tags = [ImageJobTagRow(tag=tag) for tag in normalized_tags]
+        if tuple(
+            (item.role, item.ordinal, item.storage_key, item.mime_type) for item in row.inputs
+        ) != tuple(
+            (item.role, item.ordinal, item.storage_key, item.mime_type) for item in record.inputs
+        ):
+            row.inputs = [
+                ImageJobInputRow(
+                    role=item.role,
+                    ordinal=item.ordinal,
+                    storage_key=item.storage_key,
+                    mime_type=item.mime_type,
+                )
+                for item in record.inputs
+            ]
+        if tuple(
+            (
+                item.ordinal,
+                item.storage_key,
+                item.thumbnail_key,
+                item.mime_type,
+                item.width,
+                item.height,
+                item.size_bytes,
+                item.sha256,
+            )
+            for item in row.assets
+        ) != tuple(
+            (
+                item.ordinal,
+                item.storage_key,
+                item.thumbnail_key,
+                item.mime_type,
+                item.width,
+                item.height,
+                item.size_bytes,
+                item.sha256,
+            )
+            for item in record.assets
+        ):
+            row.assets = [
+                ImageJobAssetRow(
+                    ordinal=item.ordinal,
+                    storage_key=item.storage_key,
+                    thumbnail_key=item.thumbnail_key,
+                    mime_type=item.mime_type,
+                    width=item.width,
+                    height=item.height,
+                    size_bytes=item.size_bytes,
+                    sha256=item.sha256,
+                )
+                for item in record.assets
+            ]
         row.updated_at = self.now()
 
     @staticmethod
@@ -544,6 +618,7 @@ class ImageJobRepository:
                 row.generation_settings_json
             ),
             edit_settings=ImageJobRepository._parse_edit_settings(row.edit_settings_json),
+            gpt_settings=ImageJobRepository._parse_gpt_settings(row.gpt_settings_json),
             provider_job_id=row.provider_job_id,
             status=cast(ImageJobStatus, row.status),
             progress=row.progress,
@@ -572,6 +647,28 @@ class ImageJobRepository:
             result_sha256=row.result_sha256,
             result_missing=row.result_missing,
             provider_metadata=cast(dict[str, object] | None, row.provider_metadata_json),
+            inputs=tuple(
+                JobInput(
+                    role=item.role,
+                    ordinal=item.ordinal,
+                    storage_key=item.storage_key,
+                    mime_type=cast(ImageMimeType, item.mime_type),
+                )
+                for item in row.inputs
+            ),
+            assets=tuple(
+                JobAsset(
+                    ordinal=item.ordinal,
+                    storage_key=item.storage_key,
+                    thumbnail_key=item.thumbnail_key,
+                    mime_type=cast(ImageMimeType, item.mime_type),
+                    width=item.width,
+                    height=item.height,
+                    size_bytes=item.size_bytes,
+                    sha256=item.sha256,
+                )
+                for item in row.assets
+            ),
             tags=tuple(item.tag for item in row.tags),
             error=error,
         )
@@ -680,4 +777,45 @@ class ImageJobRepository:
                 for item in raw_loras
                 if isinstance(item, dict) and isinstance(item.get("id"), str)
             ),
+        )
+
+    @staticmethod
+    def _serialize_gpt_settings(settings: GPTImageSettings | None) -> dict[str, object] | None:
+        if settings is None:
+            return None
+        return {
+            "quality": settings.quality,
+            "size": settings.size,
+            "count": settings.count,
+            "moderation": settings.moderation,
+            "reasoningEffort": settings.reasoning_effort,
+            "webSearch": settings.web_search,
+        }
+
+    @staticmethod
+    def _parse_gpt_settings(value: object) -> GPTImageSettings | None:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(value, dict):
+            return None
+        payload = cast(dict[str, Any], value)
+        quality = payload.get("quality", "auto")
+        moderation = payload.get("moderation", "auto")
+        reasoning = payload.get("reasoningEffort", "none")
+        if quality not in {"auto", "low", "medium", "high"}:
+            quality = "auto"
+        if moderation not in {"auto", "low"}:
+            moderation = "auto"
+        if reasoning not in {"none", "low", "medium", "high"}:
+            reasoning = "none"
+        return GPTImageSettings(
+            quality=cast(Any, quality),
+            size=str(payload.get("size", "1024x1024")),
+            count=max(1, min(int(payload.get("count", 1)), 2)),
+            moderation=cast(Any, moderation),
+            reasoning_effort=cast(Any, reasoning),
+            web_search=bool(payload.get("webSearch", False)),
         )

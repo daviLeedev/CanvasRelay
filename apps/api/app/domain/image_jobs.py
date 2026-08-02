@@ -8,7 +8,7 @@ from typing import Literal
 
 type AspectRatio = Literal["1:1", "4:3", "3:4", "16:9"]
 type ImageStyle = Literal["editorial", "product", "concept"]
-type ImageProviderName = Literal["demo", "comfyui"]
+type ImageProviderName = Literal["demo", "comfyui", "openai_oauth"]
 type ImageJobStatus = Literal["queued", "running", "completed", "failed", "canceled"]
 type ImageMimeType = Literal["image/svg+xml", "image/png", "image/jpeg", "image/webp"]
 type ImageJobOperation = Literal["generate", "edit"]
@@ -16,6 +16,7 @@ type ImageProgressPhase = Literal[
     "queued",
     "uploading",
     "preparing",
+    "generating",
     "sampling",
     "saving",
     "completed",
@@ -53,6 +54,41 @@ class ImageGenerationSettings:
     sampler: str = "euler"
     scheduler: str = "beta"
     loras: tuple[LoraSelection, ...] = ()
+
+
+type GPTImageQuality = Literal["auto", "low", "medium", "high"]
+type GPTImageModeration = Literal["auto", "low"]
+type GPTImageReasoning = Literal["none", "low", "medium", "high"]
+
+
+@dataclass(frozen=True, slots=True)
+class GPTImageSettings:
+    quality: GPTImageQuality = "auto"
+    size: str = "1024x1024"
+    count: int = 1
+    moderation: GPTImageModeration = "auto"
+    reasoning_effort: GPTImageReasoning = "none"
+    web_search: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class JobInput:
+    role: str
+    ordinal: int
+    storage_key: str
+    mime_type: ImageMimeType
+
+
+@dataclass(frozen=True, slots=True)
+class JobAsset:
+    ordinal: int
+    storage_key: str
+    thumbnail_key: str | None
+    mime_type: ImageMimeType
+    width: int
+    height: int
+    size_bytes: int
+    sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +136,7 @@ class ImageGenerationRequest:
     created_at: datetime
     generation_settings: ImageGenerationSettings | None = None
     edit_settings: ImageEditSettings | None = None
+    gpt_settings: GPTImageSettings | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +154,7 @@ class ImageJobRecord:
     face_reference_path: str | None = None
     generation_settings: ImageGenerationSettings | None = None
     edit_settings: ImageEditSettings | None = None
+    gpt_settings: GPTImageSettings | None = None
     provider_job_id: str | None = None
     status: ImageJobStatus = "queued"
     progress: int | None = 0
@@ -136,6 +174,8 @@ class ImageJobRecord:
     result_sha256: str | None = None
     result_missing: bool = False
     provider_metadata: dict[str, object] | None = None
+    inputs: tuple[JobInput, ...] = ()
+    assets: tuple[JobAsset, ...] = ()
     tags: tuple[str, ...] = ()
     error: ProviderErrorDetails | None = None
 

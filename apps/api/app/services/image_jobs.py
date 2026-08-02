@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import cast
 
+from PIL import Image, UnidentifiedImageError
+
 from app.domain.image_jobs import (
     AspectRatio,
+    GPTImageSettings,
     ImageEditSettings,
     ImageGenerationRequest,
     ImageGenerationSettings,
@@ -16,6 +20,8 @@ from app.domain.image_jobs import (
     ImageMimeType,
     ImageProviderName,
     ImageStyle,
+    JobAsset,
+    JobInput,
     ProviderContent,
     ProviderErrorDetails,
     ProviderSnapshot,
@@ -45,9 +51,11 @@ class ImageJobService:
         media_store: FilesystemMediaStore,
         upload_store: FilesystemUploadStore,
         max_upload_bytes: int = 20 * 1024 * 1024,
+        providers: dict[ImageProviderName, ImageGenerationProvider] | None = None,
     ) -> None:
         self.repository = repository
         self.provider = provider
+        self.providers = {provider.name: provider, **(providers or {})}
         self.media_store = media_store
         self.upload_store = upload_store
         self.max_upload_bytes = max_upload_bytes
@@ -59,6 +67,11 @@ class ImageJobService:
 
     async def describe_provider(self) -> ProviderDescriptor:
         return await self.provider.describe()
+
+    async def describe_provider_by_name(
+        self, provider_name: ImageProviderName
+    ) -> ProviderDescriptor:
+        return await self._provider_for_name(provider_name).describe()
 
     async def describe_edit_provider(self) -> ProviderDescriptor:
         return await self.provider.describe_edit()
@@ -91,6 +104,46 @@ class ImageJobService:
             provider_job_id = await self.provider.submit(request)
         except ImageProviderError as error:
             return self.repository.fail_submission(record.id, error.details)
+        return self.repository.attach_provider_job(record.id, provider_job_id)
+
+    async def create_gpt(
+        self,
+        *,
+        prompt: str,
+        aspect_ratio: AspectRatio,
+        style: ImageStyle,
+        seed: int | None,
+        operation: ImageJobOperation,
+        references: tuple[ProviderContent, ...],
+        gpt_settings: GPTImageSettings,
+    ) -> ImageJobRecord:
+        if len(references) > 5:
+            raise ImageProviderError(self._too_many_references_error())
+        provider = self._provider_for_name("openai_oauth")
+        record = self.repository.create(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            style=style,
+            seed=seed,
+            provider="openai_oauth",
+            operation=operation,
+            gpt_settings=gpt_settings,
+        )
+        try:
+            inputs: list[JobInput] = []
+            for ordinal, reference in enumerate(references):
+                storage_key = self.upload_store.save(
+                    record.id, "reference", reference, ordinal=ordinal
+                )
+                inputs.append(JobInput("reference", ordinal, storage_key, reference.mime_type))
+            record = self.repository.replace_inputs(record.id, tuple(inputs))
+            provider_job_id = await provider.submit_with_references(
+                self._request(record), references
+            )
+        except ImageProviderError as error:
+            return self.repository.fail_submission(record.id, error.details)
+        except (OSError, ValueError):
+            return self.repository.fail_submission(record.id, self._upload_persist_error())
         return self.repository.attach_provider_job(record.id, provider_job_id)
 
     async def create_edit(
@@ -252,23 +305,22 @@ class ImageJobService:
             return self._with_estimate(record)
         if record.provider_job_id is None:
             return self._with_estimate(record)
-        if record.provider != self.provider.name:
+        try:
+            provider = self._provider_for_name(record.provider)
+        except ImageProviderError:
             return self._with_estimate(
                 self.repository.apply_snapshot(
                     record.id,
                     ProviderSnapshot(
-                        "failed",
-                        None,
-                        error=self._provider_mismatch_error(),
-                        phase="failed",
+                        "failed", None, error=self._provider_mismatch_error(), phase="failed"
                     ),
                 )
             )
         # Provider clients keep short-lived connection state in memory. Rehydrate
         # it from the durable record before every reconciliation attempt.
-        self.provider.resume(record.provider_job_id, self._request(record))
+        provider.resume(record.provider_job_id, self._request(record))
         try:
-            snapshot = await self.provider.poll(record.provider_job_id)
+            snapshot = await provider.poll(record.provider_job_id)
         except ImageProviderError as error:
             if error.details.code == "provider_unavailable":
                 return self._with_estimate(self.repository.mark_stalled(record.id))
@@ -281,13 +333,32 @@ class ImageJobService:
                 )
             raise
         if snapshot.status == "completed":
-            return await self._persist_completed(record, snapshot)
+            return await self._persist_completed(record, snapshot, provider)
         return self._with_estimate(self.repository.apply_snapshot(job_id, snapshot))
 
     async def retry(self, job_id: str) -> ImageJobRecord:
         record = self.repository.get(job_id)
         if record.status != "failed" or record.error is None or not record.error.retryable:
             raise ImageProviderError(self._retry_not_available_error())
+
+        if record.provider == "openai_oauth":
+            try:
+                references = tuple(
+                    self.upload_store.read(item.storage_key, item.mime_type)
+                    for item in record.inputs
+                    if item.role == "reference"
+                )
+            except (MediaNotFoundError, ValueError) as error:
+                raise ImageProviderError(self._stored_input_missing_error()) from error
+            return await self.create_gpt(
+                prompt=record.prompt,
+                aspect_ratio=record.aspect_ratio,
+                style=record.style,
+                seed=record.seed,
+                operation=record.operation,
+                references=references,
+                gpt_settings=record.gpt_settings or GPTImageSettings(),
+            )
 
         if record.operation == "generate":
             return await self.create(
@@ -331,7 +402,7 @@ class ImageJobService:
         record = self.repository.get(job_id)
         if record.status in TERMINAL_STATUSES or record.provider_job_id is None:
             return record
-        snapshot = await self.provider.cancel(record.provider_job_id)
+        snapshot = await self._provider_for_name(record.provider).cancel(record.provider_job_id)
         return self.repository.apply_snapshot(job_id, snapshot)
 
     def delete_asset(self, job_id: str) -> None:
@@ -350,12 +421,25 @@ class ImageJobService:
         try:
             for record in records:
                 assert record.result_path is not None
-                staged.append(self.media_store.stage_delete(record.result_path))
-                staged.append(self.media_store.stage_thumbnail_delete(record.thumbnail_path))
-                if record.source_path is not None:
-                    staged.append(self.upload_store.stage_delete(record.source_path))
-                if record.face_reference_path is not None:
-                    staged.append(self.upload_store.stage_delete(record.face_reference_path))
+                media_keys = {record.result_path, *(item.storage_key for item in record.assets)}
+                thumbnail_keys = {
+                    record.thumbnail_path,
+                    *(item.thumbnail_key for item in record.assets),
+                }
+                upload_keys = {
+                    path
+                    for path in (
+                        record.source_path,
+                        record.face_reference_path,
+                        *(item.storage_key for item in record.inputs),
+                    )
+                    if path is not None
+                }
+                staged.extend(self.media_store.stage_delete(path) for path in media_keys)
+                staged.extend(
+                    self.media_store.stage_thumbnail_delete(path) for path in thumbnail_keys
+                )
+                staged.extend(self.upload_store.stage_delete(path) for path in upload_keys)
             self.repository.delete_many(unique_ids)
         except Exception as error:
             for item in reversed(staged):
@@ -404,8 +488,32 @@ class ImageJobService:
                 )
             raise ImageProviderError(self._stored_result_missing_error()) from error
 
-    async def collect_input(self, job_id: str, role: str) -> ProviderContent:
+    async def resolve_asset_file(
+        self, job_id: str, ordinal: int, *, thumbnail: bool = False
+    ) -> StoredMediaFile:
+        record = await self.get(job_id)
+        asset = next((item for item in record.assets if item.ordinal == ordinal), None)
+        if asset is None:
+            if ordinal == 0:
+                return await self.resolve_result_file(job_id, thumbnail=thumbnail)
+            raise ImageProviderError(self._result_not_ready_error())
+        try:
+            if thumbnail and asset.thumbnail_key is not None:
+                return self.media_store.describe_thumbnail(asset.thumbnail_key)
+            return self.media_store.describe(asset.storage_key, asset.mime_type)
+        except (MediaNotFoundError, ValueError) as error:
+            raise ImageProviderError(self._stored_result_missing_error()) from error
+
+    async def collect_input(self, job_id: str, role: str, ordinal: int = 0) -> ProviderContent:
         record = self.repository.get(job_id)
+        matching_input = next(
+            (item for item in record.inputs if item.role == role and item.ordinal == ordinal), None
+        )
+        if matching_input is not None:
+            try:
+                return self.upload_store.read(matching_input.storage_key, matching_input.mime_type)
+            except (MediaNotFoundError, ValueError) as error:
+                raise ImageProviderError(self._stored_input_missing_error()) from error
         path = record.source_path if role == "source" else record.face_reference_path
         if role not in {"source", "identity"} or path is None:
             raise ImageProviderError(self._stored_input_missing_error())
@@ -414,8 +522,18 @@ class ImageJobService:
         except (MediaNotFoundError, ValueError) as error:
             raise ImageProviderError(self._stored_input_missing_error()) from error
 
-    def resolve_input_file(self, job_id: str, role: str) -> StoredMediaFile:
+    def resolve_input_file(self, job_id: str, role: str, ordinal: int = 0) -> StoredMediaFile:
         record = self.repository.get(job_id)
+        matching_input = next(
+            (item for item in record.inputs if item.role == role and item.ordinal == ordinal), None
+        )
+        if matching_input is not None:
+            try:
+                return self.upload_store.describe(
+                    matching_input.storage_key, matching_input.mime_type
+                )
+            except (MediaNotFoundError, ValueError) as error:
+                raise ImageProviderError(self._stored_input_missing_error()) from error
         path = record.source_path if role == "source" else record.face_reference_path
         if role not in {"source", "identity"} or path is None:
             raise ImageProviderError(self._stored_input_missing_error())
@@ -428,6 +546,7 @@ class ImageJobService:
         self,
         record: ImageJobRecord,
         snapshot: ProviderSnapshot,
+        provider: ImageGenerationProvider,
     ) -> ImageJobRecord:
         if record.provider_job_id is None or snapshot.result is None:
             return self.repository.apply_snapshot(
@@ -447,12 +566,28 @@ class ImageJobService:
             ),
         )
         try:
-            content = await self.provider.collect(record.provider_job_id)
-            stored = self.media_store.save_with_metadata(record.id, content)
-            thumbnail_path = self.media_store.ensure_thumbnail(
-                stored.storage_key,
-                content.mime_type,
-            )
+            contents = await provider.collect_many(record.provider_job_id)
+            if not contents:
+                raise ImageProviderError(self._result_not_ready_error())
+            assets: list[JobAsset] = []
+            for ordinal, content in enumerate(contents):
+                stored = self.media_store.save_with_metadata(f"{record.id}_{ordinal + 1}", content)
+                thumbnail_path = self.media_store.ensure_thumbnail(
+                    stored.storage_key, content.mime_type
+                )
+                width, height = self._content_dimensions(content)
+                assets.append(
+                    JobAsset(
+                        ordinal=ordinal,
+                        storage_key=stored.storage_key,
+                        thumbnail_key=thumbnail_path,
+                        mime_type=content.mime_type,
+                        width=width,
+                        height=height,
+                        size_bytes=stored.size_bytes,
+                        sha256=stored.sha256,
+                    )
+                )
         except (ImageProviderError, OSError, ValueError) as error:
             details = (
                 error.details
@@ -463,25 +598,26 @@ class ImageJobService:
                 record.id,
                 ProviderSnapshot("failed", None, error=details),
             )
-        return self._with_estimate(
-            self.repository.apply_snapshot(
-                record.id,
-                snapshot,
-                result_path=stored.storage_key,
-                thumbnail_path=thumbnail_path,
-                result_size_bytes=stored.size_bytes,
-                result_sha256=stored.sha256,
-            )
+        primary = assets[0]
+        updated = self.repository.apply_snapshot(
+            record.id,
+            snapshot,
+            result_path=primary.storage_key,
+            thumbnail_path=primary.thumbnail_key,
+            result_size_bytes=primary.size_bytes,
+            result_sha256=primary.sha256,
         )
+        return self._with_estimate(self.repository.replace_assets(updated.id, tuple(assets)))
 
     def _resume_active_jobs(self) -> None:
         for record in self.repository.list_active():
             if record.provider_job_id is None:
                 self.repository.fail_submission(record.id, self._submission_interrupted_error())
                 continue
-            if record.provider != self.provider.name:
+            provider = self.providers.get(record.provider)
+            if provider is None:
                 continue
-            self.provider.resume(record.provider_job_id, self._request(record))
+            provider.resume(record.provider_job_id, self._request(record))
 
     @staticmethod
     def _request(record: ImageJobRecord) -> ImageGenerationRequest:
@@ -494,7 +630,22 @@ class ImageJobService:
             created_at=record.created_at,
             generation_settings=record.generation_settings,
             edit_settings=record.edit_settings,
+            gpt_settings=record.gpt_settings,
         )
+
+    def _provider_for_name(self, provider_name: ImageProviderName) -> ImageGenerationProvider:
+        provider = self.providers.get(provider_name)
+        if provider is None:
+            raise ImageProviderError(self._provider_mismatch_error())
+        return provider
+
+    @staticmethod
+    def _content_dimensions(content: ProviderContent) -> tuple[int, int]:
+        try:
+            with Image.open(BytesIO(content.body)) as image:
+                return image.size
+        except (OSError, UnidentifiedImageError):
+            return (0, 0)
 
     async def _resolve_source_job(self, job_id: str) -> ProviderContent:
         try:
@@ -582,6 +733,15 @@ class ImageJobService:
             "edit_source_invalid",
             "Choose one source image for this edit.",
             "Upload an image or select one completed Library result.",
+            False,
+        )
+
+    @staticmethod
+    def _too_many_references_error() -> ProviderErrorDetails:
+        return ProviderErrorDetails(
+            "reference_limit_exceeded",
+            "Choose no more than five reference images.",
+            "Remove one or more references and create the image again.",
             False,
         )
 
